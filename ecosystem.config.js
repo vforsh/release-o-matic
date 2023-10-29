@@ -1,7 +1,7 @@
 module.exports = {
   name: 'release-o-matic',
   script: 'src/index.ts',
-  interpreter: '/Users/vlad/.bun/bin/bun',
+  interpreter: 'bun',
 
   deploy: {
     production: {
@@ -11,7 +11,7 @@ module.exports = {
       'repo': 'git@github.com:vforsh/release-o-matic.git',
       'path': '/var/www/html/papa-cherry-2/releases',
       'post-setup': '/root/.bun/bin/bun install',
-      'post-deploy': 'pm2 startOrRestart ecosystem.config.js --interpreter=/root/.bun/bin/bun',
+      'post-deploy': 'pm2 startOrRestart ecosystem.config.js',
     },
   },
 }
