@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "bun run --hot src/index.ts"
+    "dev": "bun run --hot src/index.ts",
+    "deploy": "pm2 deploy production"
   },
   "dependencies": {
     "@tsconfig/bun": "^1.0.1",
