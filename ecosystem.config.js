@@ -10,7 +10,7 @@ module.exports = {
       'ref': 'origin/master',
       'repo': 'git@github.com:vforsh/release-o-matic.git',
       'path': '/var/www/html/papa-cherry-2/releases',
-      'post-deploy': '/root/.bun/bin/bun install && pm2 startOrRestart ecosystem.config.js',
+      'post-deploy': '/root/.bun/bin/bun install && /root/.bun/bin/pm2 startOrRestart ecosystem.config.js',
     },
   },
 }
