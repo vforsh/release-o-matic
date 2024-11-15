@@ -1,4 +1,18 @@
 # deps
 node_modules/
 
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variable files
+.env
+.env.dev
+.env.prod
+
 test/
