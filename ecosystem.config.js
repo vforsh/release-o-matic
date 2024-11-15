@@ -6,7 +6,7 @@ module.exports = {
   deploy: {
     production: {
       'user': 'root',
-      'host': ['robowhale.co'],
+      'host': ['robowhale.ru'],
       'ref': 'origin/master',
       'repo': 'git@github.com:vforsh/release-o-matic.git',
       'path': '/var/www/html/papa-cherry-2/releases',
