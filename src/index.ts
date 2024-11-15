@@ -30,7 +30,7 @@ const gameRoot = path.join(__dirname, '../test/papa-cherry-2')
 
 const app = new Hono()
 
-app.get('/', (c) => c.redirect('/list'))
+app.get('/', (c) => c.text(gameRoot))
 
 app.get('/env', (c) => {
 	let envStr = JSON.stringify(process.env)
