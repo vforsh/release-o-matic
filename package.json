@@ -1,21 +1,25 @@
 {
-  "scripts": {
-    "dev": "bun run --hot src/index.ts",
-    "deploy": "pm2 deploy production"
-  },
-  "dependencies": {
-    "@tsconfig/bun": "^1.0.1",
-    "@types/node-ssh": "^7.0.3",
-    "elysia": "^0.7.21",
-    "execa": "^8.0.1",
-    "hono": "^3.8.2",
-    "kleur": "^4.1.5",
-    "node-ssh": "^13.1.0",
-    "pm2": "^5.3.0",
-    "prettier": "^3.0.3",
-    "tiny-dirname": "^1.0.0"
-  },
-  "devDependencies": {
-    "bun-types": "^1.0.7"
-  }
+	"name": "release-o-matic",
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"deploy": "pm2 deploy production"
+	},
+	"dependencies": {
+		"@types/fs-extra": "^11.0.4",
+		"@types/lodash-es": "^4.17.12",
+		"fs-extra": "^11.2.0",
+		"globby": "^14.0.2",
+		"hono": "^4.6.10",
+		"lodash-es": "^4.17.21",
+		"prettier": "^3.3.3",
+		"prettier-plugin-organize-imports": "^4.1.0",
+		"true-myth": "^8.0.1",
+		"type-fest": "^4.27.0"
+	},
+	"devDependencies": {
+		"@types/bun": "latest"
+	},
+	"engines": {
+		"bun": "1.1.34"
+	}
 }
