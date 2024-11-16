@@ -19,7 +19,7 @@ module.exports = {
       'ref': 'origin/master',
       'repo': 'git@github.com:vforsh/release-o-matic.git',
       'path': DEPLOY_DIR,
-      "pre-deploy": `scp .env.prod root@${HOST}:${DEPLOY_DIR}/source`,
+      "pre-deploy-local": `scp .env.prod root@${HOST}:${DEPLOY_DIR}/source`,
       'post-deploy': `${BUN} install && ${BUN_DIR}/pm2 startOrRestart ecosystem.config.js`,
     },
   },
