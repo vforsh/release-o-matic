@@ -34,6 +34,8 @@ app.use(logger())
 app.get('/', (c) => c.text(GAME_ROOT))
 
 app.get('/env', (c) => {
+	// TODO auth bearer check
+	
 	return c.json(env)
 })
 
