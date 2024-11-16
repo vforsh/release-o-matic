@@ -4,5 +4,6 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "esModuleInterop": true,
+    "moduleResolution": "Bundler"
   }
 }
