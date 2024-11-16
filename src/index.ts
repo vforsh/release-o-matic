@@ -1,5 +1,6 @@
 import path from 'path'
 import { Hono } from 'hono'
+import { logger } from 'hono/logger'
 import * as fse from 'fs-extra'
 import { globby } from 'globby'
 import { without } from 'lodash-es'
@@ -29,6 +30,9 @@ const gameRoot = path.join(__dirname, '../test/papa-cherry-2')
 // TODO add tests
 
 const app = new Hono()
+
+// TODO setup custom logger - https://hono.dev/docs/middleware/builtin/logger#example
+app.use(logger())
 
 app.get('/', (c) => c.text(gameRoot))
 
