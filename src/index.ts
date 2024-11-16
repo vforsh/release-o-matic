@@ -6,6 +6,7 @@ import { globby } from 'globby'
 import { without } from 'lodash-es'
 import { Result } from 'true-myth'
 import { env } from './env'
+import { toReadableDateString, fromReadableDateString } from './utils/date/readable-date-string'
 
 type Releases = {
 	current: string;
@@ -16,14 +17,23 @@ type ReleaseInfo = {
 	key: string,
 	index: string,
 	files: string,
-	releasedAt: number,
+	releasedAt: string,
+	builtAt: string,
+	gitBranch: string,
+	gitCommit: string,
+}
+
+type BuildInfo = {
+	version: number,
+	branch: string,
+	commit: string,
+	builtAt: string
 }
 
 const GAME_ROOT = env.GAME_BUILDS_DIR
 
-// TODO client - grunt task to use this API
-// TODO client - handle CDN on client side
 // TODO use bearer auth
+// TODO add README - why this does exist, how to setup deployment with PM2
 // TODO add tests
 
 const app = new Hono()
@@ -77,6 +87,75 @@ app.get('/:platform/current', (c) => {
 	return c.json(releases.builds.find(item => item.key === releases.current))
 })
 
+// публикация нового билда
+app.get('/:platform/publish/:build?', async (c) => {
+	// TODO auth bearer check
+	
+	let platform = c.req.param('platform')
+	
+	let buildKey = c.req.param('build') || getLatestMasterBuildKey()
+	
+	if (!buildKey) {
+		return c.json({ message: `master build doesn't exist` }, 400)
+	}
+	
+	let releasesJsonPath = path.join(GAME_ROOT, `prod/${platform}/releases.json`)
+	let releases: Releases = fse.existsSync(releasesJsonPath) ? fse.readJsonSync(releasesJsonPath) : {
+		current: '',
+		builds: [],
+	}
+	
+	if (releases.current === buildKey) {
+		return c.json({ message: `'${buildKey}' is already a current release` }, 400)
+	}
+	
+	let srcDir = path.join(GAME_ROOT, 'master')
+	
+	let destDir = path.join(GAME_ROOT, `prod/${platform}`)
+	
+	let destDirTemp = path.join(GAME_ROOT, `prod/${platform}_temp`)
+	
+	// копируем билд во временную папку
+	fse.ensureDirSync(destDirTemp)
+	fse.copySync(srcDir, destDirTemp, {})
+	
+	let buildInfo = fse.readJsonSync(path.join(destDirTemp, 'build_info.json')) as BuildInfo
+	
+	// build_info.json нам уже не нужен, удаляем его
+	fse.rmSync(path.join(destDirTemp, 'build_info.json'))
+	
+	// переименовываем index.html в index_${buildKey}.html (например, index_master-11.html)
+	fse.renameSync(path.join(destDirTemp, 'index.html'), path.join(destDirTemp, `index_${buildKey}.html`))
+	
+	// создаем файл files_${buildKey}.json, в котором будут перечислены все файлы билда
+	let filesJsonPath = path.join(destDirTemp, `files_${buildKey}.json`)
+	let files = await globby(path.join(destDirTemp, '**/*'))
+	files = [filesJsonPath, ...files]
+	files = files.map(filepath => path.relative(destDirTemp, filepath))
+	fse.outputJsonSync(path.join(destDirTemp, `files_${buildKey}.json`), files, { spaces: '\t' })
+	
+	// копируем все файлы в финальную папку
+	fse.copySync(destDirTemp, destDir)
+	
+	// удаляем временную папку
+	fse.rmSync(destDirTemp, { recursive: true })
+	
+	// обновляем releases.json
+	let newRelease = createNewRelease(buildKey, buildInfo)
+	releases.current = newRelease.key
+	releases.builds.unshift(newRelease)
+	fse.outputJsonSync(releasesJsonPath, releases, { spaces: '\t' })
+	
+	let removedReleases = await removeOldReleases(releasesJsonPath)
+	
+	updateSymlink(destDir, newRelease.key)
+	
+	return c.json({
+		path: destDir,
+		release: newRelease,
+	})
+})
+
 // инфо о конкретном билде
 app.get('/:platform/:build', (c) => {
 	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
@@ -108,69 +187,19 @@ app.get('/:platform/:build', (c) => {
 	})
 })
 
-// публикация нового билда
-app.get('/:platform/publish/:build', async (c) => {
-	// TODO auth bearer check
+// откат к какому-то из прошлых билдов
+app.get('/:platform/rollback/:build?', async (c) => {
+	// TODO auth bearer check for prod env
 	
 	let platform = c.req.param('platform')
 	
-	// TODO implement getLatestMasterBuildKey()
-	let buildKey = c.req.param('build') /* || getLatestMasterBuildKey() */
+	let buildKey = c.req.param('build') || getPreviousBuildKey(platform)
 	
-	let srcDir = path.join(GAME_ROOT, 'master')
+	if (!buildKey) {
+		return c.json({ message: `there are no previous builds` }, 400)
+	}
 	
-	let destDir = path.join(GAME_ROOT, `prod/${platform}`)
-	
-	let destDirTemp = path.join(GAME_ROOT, `prod/${platform}_temp`)
-	
-	// копируем билд во временную папку
-	fse.ensureDirSync(destDirTemp)
-	fse.copySync(srcDir, destDirTemp, {})
-	
-	// build_info.json нам уже не нужен, удаляем его
-	fse.rmSync(path.join(destDirTemp, 'build_info.json'))
-	
-	// переименовываем index.html в index_${buildKey}.html (например, index_master-11.html)
-	fse.renameSync(path.join(destDirTemp, 'index.html'), path.join(destDirTemp, `index_${buildKey}.html`))
-	
-	// создаем файл files_${buildKey}.json, в котором будут перечислены все файлы билда
-	let filesJsonPath = path.join(destDirTemp, `files_${buildKey}.json`)
-	let files = await globby(path.join(destDirTemp, '**/*'))
-	files = [filesJsonPath, ...files]
-	files = files.map(filepath => path.relative(destDirTemp, filepath))
-	fse.outputJsonSync(path.join(destDirTemp, `files_${buildKey}.json`), files, { spaces: '\t' })
-	
-	// копируем все файлы в финальную папку
-	fse.copySync(destDirTemp, destDir)
-	
-	// удаляем временную папку
-	fse.rmSync(destDirTemp, { recursive: true })
-	
-	let releasesJsonPath = path.join(GAME_ROOT, `prod/${platform}/releases.json`)
-	let newRelease = updateReleasesJson(releasesJsonPath, buildKey)
-	// console.log('newRelease', newRelease)
-	
-	let removedReleases = await removeOldReleases(releasesJsonPath)
-	// console.log('removedReleases', removedReleases)
-	
-	updateSymlink(destDir, newRelease.key)
-	
-	// let cdnRefreshResult = await refreshCdn(destDir, buildKey)
-	// console.log(`cdn refresh`, cdnRefreshResult)
-	
-	return c.json({
-		path: destDir,
-	})
-})
-
-// откат к какому-то из прошлых билдов
-app.get('/:platform/rollback/:build', async (c) => {
-	// TODO auth bearer check for prod env
-	
-	// TODO implement getPreviousBuildKey()
-	let buildKey = c.req.param('build') /* || getPreviousBuildKey() */
-	
-	let releasesDir = `prod/${c.req.param('platform')}`
+	let releasesDir = `prod/${platform}`
 	let releasesJsonPath = path.join(GAME_ROOT, `${releasesDir}/releases.json`)
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
 	
@@ -190,30 +219,63 @@ app.get('/:platform/rollback/:build', async (c) => {
 	// update index.html symlink
 	updateSymlink(releasesDir, buildKey)
 	
-	// refresh CDN
-	// await refreshCdn(releasesDir, buildKey)
-	
-	return c.json(release)
+	return c.json({
+		path: '',
+		release: release,
+	})
 })
 
-function updateReleasesJson(filepath: string, newBuildKey: string) {
-	let releases: Releases = fse.existsSync(filepath)
-		? fse.readJsonSync(filepath)
-		: { current: '', builds: [] }
-	
-	let newRelease: ReleaseInfo = {
-		key: newBuildKey,
-		index: `index_${newBuildKey}.html`,
-		files: `files_${newBuildKey}.json`,
-		releasedAt: Date.now(),
+function getLatestMasterBuildKey(): string | undefined {
+	const masterDir = path.join(GAME_ROOT, 'master')
+	const buildInfoPath = path.join(masterDir, 'build_info.json')
+	if (!fse.existsSync(buildInfoPath)) {
+		return undefined
 	}
 	
-	releases.current = newRelease.key
-	releases.builds.unshift(newRelease)
+	const buildInfo = fse.readJsonSync(buildInfoPath) as BuildInfo
 	
-	fse.outputJsonSync(filepath, releases, { spaces: '\t' })
+	return 'master-' + buildInfo.version
+}
+
+/**
+ * @return {string} - key of the build that was published before the current one or undefined if there are no previous builds
+ */
+function getPreviousBuildKey(platform: string): string | undefined {
+	const releasesDir = path.join(GAME_ROOT, `prod/${platform}`)
+	const releasesJsonPath = path.join(releasesDir, 'releases.json')
+	if (!fse.existsSync(releasesJsonPath)) {
+		return undefined
+	}
 	
-	return newRelease
+	const releases = fse.readJsonSync(releasesJsonPath) as Releases
+	
+	// sort builds by date from newest to oldest
+	const buildsSortedByDate = releases.builds.sort((a, b) => {
+		return fromReadableDateString(b.releasedAt) - fromReadableDateString(a.releasedAt)
+	})
+	
+	const currentBuild = buildsSortedByDate.find(item => item.key === releases.current)
+	if (!currentBuild) {
+		return undefined
+	}
+	
+	const currentBuildIndex = buildsSortedByDate.indexOf(currentBuild)
+	
+	const previousBuild = buildsSortedByDate.at(currentBuildIndex - 1)
+	
+	return previousBuild?.key
+}
+
+function createNewRelease(buildKey: string, buildInfo: BuildInfo): ReleaseInfo {
+	return {
+		key: buildKey,
+		index: `index_${buildKey}.html`,
+		files: `files_${buildKey}.json`,
+		releasedAt: toReadableDateString(Date.now()),
+		builtAt: buildInfo.builtAt,
+		gitBranch: buildInfo.branch,
+		gitCommit: buildInfo.commit,
+	}
 }
 
 async function removeOldReleases(releasesJsonPath: string, buildsNumToKeep = 5) {
