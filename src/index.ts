@@ -5,6 +5,7 @@ import * as fse from 'fs-extra'
 import { globby } from 'globby'
 import { without } from 'lodash-es'
 import { Result } from 'true-myth'
+import { env } from './env'
 
 type Releases = {
 	current: string;
@@ -18,15 +19,11 @@ type ReleaseInfo = {
 	releasedAt: number,
 }
 
-// const gameRoot = process.env.NODE_ENV === 'development'
-// 	? path.join(__dirname, '../test/papa-cherry-2')
-// 	: path.join(__dirname, '../../../')
+const GAME_ROOT = env.GAME_BUILDS_DIR
 
-const gameRoot = path.join(__dirname, '../test/papa-cherry-2')
-
-// TODO deploy and setup Caddy
-// TODO configure and test CDN
-// TODO add logger
+// TODO client - grunt task to use this API
+// TODO client - handle CDN on client side
+// TODO use bearer auth
 // TODO add tests
 
 const app = new Hono()
@@ -34,17 +31,15 @@ const app = new Hono()
 // TODO setup custom logger - https://hono.dev/docs/middleware/builtin/logger#example
 app.use(logger())
 
-app.get('/', (c) => c.text(gameRoot))
+app.get('/', (c) => c.text(GAME_ROOT))
 
 app.get('/env', (c) => {
-	let envStr = JSON.stringify(process.env)
-	let envParsed = JSON.parse(envStr)
-	return c.json(envParsed)
+	return c.json(env)
 })
 
 // инфо о всех билдах
 app.get('/:platform', (c) => {
-	const releasesDir = path.join(gameRoot, `prod/${c.req.param('platform')}`)
+	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -65,7 +60,7 @@ app.get('/:platform', (c) => {
 // инфо о текущем билде
 // TODO use same controller as for '/:platform/:build'
 app.get('/:platform/current', (c) => {
-	const releasesDir = path.join(gameRoot, `prod/${c.req.param('platform')}`)
+	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -82,7 +77,7 @@ app.get('/:platform/current', (c) => {
 
 // инфо о конкретном билде
 app.get('/:platform/:build', (c) => {
-	const releasesDir = path.join(gameRoot, `prod/${c.req.param('platform')}`)
+	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -120,11 +115,11 @@ app.get('/:platform/publish/:build', async (c) => {
 	// TODO implement getLatestMasterBuildKey()
 	let buildKey = c.req.param('build') /* || getLatestMasterBuildKey() */
 	
-	let srcDir = path.join(gameRoot, 'master')
+	let srcDir = path.join(GAME_ROOT, 'master')
 	
-	let destDir = path.join(gameRoot, `prod/${platform}`)
+	let destDir = path.join(GAME_ROOT, `prod/${platform}`)
 	
-	let destDirTemp = path.join(gameRoot, `prod/${platform}_temp`)
+	let destDirTemp = path.join(GAME_ROOT, `prod/${platform}_temp`)
 	
 	// копируем билд во временную папку
 	fse.ensureDirSync(destDirTemp)
@@ -149,7 +144,7 @@ app.get('/:platform/publish/:build', async (c) => {
 	// удаляем временную папку
 	fse.rmSync(destDirTemp, { recursive: true })
 	
-	let releasesJsonPath = path.join(gameRoot, `prod/${platform}/releases.json`)
+	let releasesJsonPath = path.join(GAME_ROOT, `prod/${platform}/releases.json`)
 	let newRelease = updateReleasesJson(releasesJsonPath, buildKey)
 	// console.log('newRelease', newRelease)
 	
@@ -174,7 +169,7 @@ app.get('/:platform/rollback/:build', async (c) => {
 	let buildKey = c.req.param('build') /* || getPreviousBuildKey() */
 	
 	let releasesDir = `prod/${c.req.param('platform')}`
-	let releasesJsonPath = path.join(gameRoot, `${releasesDir}/releases.json`)
+	let releasesJsonPath = path.join(GAME_ROOT, `${releasesDir}/releases.json`)
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
 	
 	if (releases.current === buildKey) {
