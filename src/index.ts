@@ -101,7 +101,9 @@ app.get('/:env/postDeploy/:version', (c) => {
 		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
 	}
 	
-	fse.symlinkSync(deployedBuildDir, 'latest')
+	let symlinkPath = path.join(envDir, 'latest')
+	fse.rmSync(symlinkPath, { force: true })
+	fse.symlinkSync(deployedBuildDir, symlinkPath)
 	
 	// TODO update modified date for deployed build dir
 	
@@ -110,6 +112,7 @@ app.get('/:env/postDeploy/:version', (c) => {
 	return c.json({
 		buildVersion: deployedBuildVersion,
 		buildDir: path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir),
+		buildDirAlias: path.relative(ENV.WEB_SERVER_DIR, symlinkPath),
 	})
 })
 
