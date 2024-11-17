@@ -27,7 +27,7 @@ You will need to set up a reverse proxy with your server software to forward req
 I use Caddy as a web server, here is the section of my Caddyfile (by default it is located at `/etc/caddy/Caddyfile`):
 
 ```
-robowhale.ru {
+your-domain.com {
 	# Set this path to your site's directory.
 	root * /var/www/html
 
