@@ -11,6 +11,7 @@ export const env = createEnv({
 	
 	client: {
 		BEARER_TOKEN: z.string().min(1),
+		WEB_SERVER_DIR: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
 		GAME_BUILDS_DIR: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
 	},
 	

@@ -2,10 +2,9 @@ import path from 'path'
 import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import * as fse from 'fs-extra'
-import { globby } from 'globby'
+import { globby, globbySync } from 'globby'
 import { without } from 'lodash-es'
-import { Result } from 'true-myth'
-import { env } from './env'
+import { env as ENV } from './env'
 import { toReadableDateString, fromReadableDateString } from './utils/date/readable-date-string'
 
 type Releases = {
@@ -30,9 +29,10 @@ type BuildInfo = {
 	builtAt: string
 }
 
-const GAME_ROOT = env.GAME_BUILDS_DIR
+const GAME_ROOT = ENV.GAME_BUILDS_DIR
 
 // TODO use bearer auth
+// TODO переделать publish нового билда
 // TODO add README - why this does exist, how to setup deployment with PM2
 // TODO add tests
 
@@ -46,7 +46,91 @@ app.get('/', (c) => c.text(GAME_ROOT))
 app.get('/env', (c) => {
 	// TODO auth bearer check
 	
-	return c.json(env)
+	return c.json(ENV)
+})
+
+// готовим новый билд к деплою в конкретное окружение
+app.get('/:env/preDeploy', (c) => {
+	// TODO use bearer auth
+	
+	const env = c.req.param('env')
+	
+	const envDir = path.join(GAME_ROOT, env)
+	
+	fse.ensureDirSync(envDir)
+	
+	const existingBuilds = fse.readdirSync(envDir)
+		.filter(item => fse.statSync(path.join(envDir, item)).isDirectory())
+		.filter(item => Number.isInteger(parseInt(item)))
+		.sort((a, b) => parseInt(a) - parseInt(b))
+	
+	const lastBuild = existingBuilds.at(-1)
+	
+	const newBuildVersion = lastBuild ? parseInt(lastBuild) + 1 : 1
+	
+	const newBuildDir = path.join(envDir, newBuildVersion.toString())
+	
+	if (lastBuild) {
+		fse.copySync(path.join(envDir, lastBuild), newBuildDir)
+	}
+	
+	return c.json({
+		newBuildVersion: newBuildVersion,
+		newBuildDir: newBuildDir,
+		builds: existingBuilds,
+	})
+})
+
+// колбек после успешного деплоя нового билда в конкретное окружение
+app.get('/:env/postDeploy/:version', (c) => {
+	// TODO use bearer auth
+	
+	const env = c.req.param('env')!
+	
+	const envDir = path.join(GAME_ROOT, env)
+	
+	const deployedBuildVersion = c.req.param('version')
+	
+	if (deployedBuildVersion === undefined) {
+		return c.json({ message: `build #${deployedBuildVersion} doesn't exist` }, 404)
+	}
+	
+	const deployedBuildDir = path.join(envDir, deployedBuildVersion.toString())
+	
+	if (!fse.existsSync(deployedBuildDir)) {
+		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
+	}
+	
+	fse.symlinkSync(deployedBuildDir, 'latest')
+	
+	// TODO update modified date for deployed build dir
+	
+	// TODO remove old builds
+	
+	return c.json({
+		buildVersion: deployedBuildVersion,
+		buildDir: path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir),
+	})
+})
+
+// инфо о всех билдах для конкретного окружения
+app.get('/:env/builds', (c) => {
+	const env = c.req.param('env')
+	
+	const envDir = path.join(GAME_ROOT, env)
+	
+	const existingBuilds = fse.readdirSync(envDir)
+		.filter(item => Number.isInteger(parseInt(item)) && fse.statSync(path.join(envDir, item)).isDirectory())
+		.sort((a, b) => parseInt(b) - parseInt(a))
+		.reduce((acc, item) => {
+			const filepath = path.join(envDir, item)
+			const key = path.relative(ENV.WEB_SERVER_DIR, filepath)
+			const modifiedAt = fse.statSync(filepath).mtime
+			acc[key] = toReadableDateString(modifiedAt.getTime())
+			return acc
+		}, {} as any)
+	
+	return c.json(existingBuilds)
 })
 
 // инфо о всех билдах
@@ -67,24 +151,6 @@ app.get('/:platform', (c) => {
 	const releases = fse.readJsonSync(releasesJsonPath) as Releases
 	
 	return c.json(releases)
-})
-
-// инфо о текущем билде
-// TODO use same controller as for '/:platform/:build'
-app.get('/:platform/current', (c) => {
-	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
-	if (!fse.existsSync(releasesDir)) {
-		return c.json({ message: `platform doesn't exist` }, 404)
-	}
-	
-	const releasesJsonPath = path.join(releasesDir, 'releases.json')
-	if (!fse.existsSync(releasesJsonPath)) {
-		return c.json({ message: `there are no published build` }, 404)
-	}
-	
-	const releases = fse.readJsonSync(releasesJsonPath) as Releases
-	
-	return c.json(releases.builds.find(item => item.key === releases.current))
 })
 
 // публикация нового билда
@@ -129,7 +195,7 @@ app.get('/:platform/publish/:build?', async (c) => {
 	
 	// создаем файл files_${buildKey}.json, в котором будут перечислены все файлы билда
 	let filesJsonPath = path.join(destDirTemp, `files_${buildKey}.json`)
-	let files = await globby(path.join(destDirTemp, '**/*'))
+	let files = globbySync(path.join(destDirTemp, '**/*'))
 	files = [filesJsonPath, ...files]
 	files = files.map(filepath => path.relative(destDirTemp, filepath))
 	fse.outputJsonSync(path.join(destDirTemp, `files_${buildKey}.json`), files, { spaces: '\t' })
@@ -148,12 +214,30 @@ app.get('/:platform/publish/:build?', async (c) => {
 	
 	let removedReleases = await removeOldReleases(releasesJsonPath)
 	
-	updateSymlink(destDir, newRelease.key)
+	updateIndexHtmlSymlink(destDir, newRelease.key)
 	
 	return c.json({
 		path: destDir,
 		release: newRelease,
 	})
+})
+
+// инфо о текущем билде
+// TODO use same controller as for '/:platform/:build'
+app.get('/:platform/current', (c) => {
+	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
+	if (!fse.existsSync(releasesDir)) {
+		return c.json({ message: `platform doesn't exist` }, 404)
+	}
+	
+	const releasesJsonPath = path.join(releasesDir, 'releases.json')
+	if (!fse.existsSync(releasesJsonPath)) {
+		return c.json({ message: `there are no published build` }, 404)
+	}
+	
+	const releases = fse.readJsonSync(releasesJsonPath) as Releases
+	
+	return c.json(releases.builds.find(item => item.key === releases.current))
 })
 
 // инфо о конкретном билде
@@ -217,7 +301,7 @@ app.get('/:platform/rollback/:build?', async (c) => {
 	fse.outputJsonSync(releasesJsonPath, releases, { spaces: '\t' })
 	
 	// update index.html symlink
-	updateSymlink(releasesDir, buildKey)
+	updateIndexHtmlSymlink(releasesDir, buildKey)
 	
 	return c.json({
 		path: '',
@@ -305,7 +389,7 @@ async function removeOldReleases(releasesJsonPath: string, buildsNumToKeep = 5) 
 	return { removedBuilds: buildsToRemove.map(item => item.key) }
 }
 
-function updateSymlink(dir: string, buildKey: string): void {
+function updateIndexHtmlSymlink(dir: string, buildKey: string): void {
 	let target = path.join(dir, `index_${buildKey}.html`)
 	let filepath = path.join(dir, 'index.html')
 	
