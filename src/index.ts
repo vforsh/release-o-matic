@@ -133,6 +133,8 @@ app.get('/:env/builds', (c) => {
 			return acc
 		}, {} as any)
 	
+	// TODO add info about latest symlink
+	
 	return c.json(existingBuilds)
 })
 

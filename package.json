@@ -1,7 +1,7 @@
 {
 	"name": "release-o-matic",
 	"scripts": {
-		"dev": "bun run --hot src/index.ts",
+		"start": "bun run --hot src/index.ts",
 		"deploy": "pm2 deploy production"
 	},
 	"dependencies": {
