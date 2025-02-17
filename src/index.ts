@@ -31,7 +31,6 @@ type BuildInfo = {
 
 const GAME_ROOT = ENV.GAME_BUILDS_DIR
 
-// TODO use bearer auth
 // TODO переделать publish нового билда
 // TODO add README - why this does exist, how to setup deployment with PM2
 // TODO add tests
@@ -69,8 +68,6 @@ app.use(async function authMiddleware(c: any, next: any) {
 app.get('/', (c) => c.text(GAME_ROOT))
 
 app.get('/env', (c) => {
-	// TODO auth bearer check
-
 	return c.json(ENV)
 })
 
@@ -202,8 +199,6 @@ app.get('/:platform', (c) => {
 
 // публикация нового билда
 app.get('/:platform/publish/:build?', async (c) => {
-	// TODO auth bearer check
-
 	let platform = c.req.param('platform')
 
 	let buildKey = c.req.param('build') || getLatestMasterBuildKey()
@@ -322,8 +317,6 @@ app.get('/:platform/:build', (c) => {
 
 // откат к какому-то из прошлых билдов
 app.get('/:platform/rollback/:build?', async (c) => {
-	// TODO auth bearer check for prod env
-
 	let platform = c.req.param('platform')
 
 	let buildKey = c.req.param('build') || getPreviousBuildKey(platform)
