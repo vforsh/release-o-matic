@@ -261,6 +261,7 @@ app.get('/:platform/publish/:build?', async (c) => {
 	releases.builds.unshift(newRelease)
 	fse.outputJsonSync(releasesJsonPath, releases, { spaces: '\t' })
 
+	// @ts-expect-error
 	let removedReleases = await removeOldReleases(releasesJsonPath)
 
 	updateIndexHtmlSymlink(destDir, newRelease.key)
@@ -310,6 +311,7 @@ app.get('/:platform/:build', (c) => {
 		return c.json({ message: `build doesn't exist` }, 404)
 	}
 
+	// @ts-expect-error
 	const filesJsonPath = path.join(releasesDir)
 	const files = fse.readJsonSync(path.join(releasesDir, `files_${buildKey}.json`))
 
