@@ -78,12 +78,17 @@ app.get('/env', (c) => {
 })
 
 // готовим новый билд к деплою в конкретное окружение
-app.get('/:env/preDeploy/:version', (c) => {
-	// TODO use bearer auth
+// endpoint возвращает
+// - версию нового билда, которую нужно "вшить" в приложение
+// - директорию, в которую нужно положить билд (например, используя rsync)
+app.get('/preDeploy/:game/:env', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const env = c.req.param('env')
 
-	const envDir = path.join(GAME_ROOT, env)
+	const envDir = path.join(gameDir, env)
 
 	fse.ensureDirSync(envDir)
 
@@ -93,29 +98,16 @@ app.get('/:env/preDeploy/:version', (c) => {
 		.filter((item) => Number.isInteger(parseInt(item)))
 		.sort((a, b) => parseInt(a) - parseInt(b))
 
-	const lastBuild = parseInt(existingBuilds.at(-1)!)
+	const lastBuildVersion = parseInt(existingBuilds.at(-1)!)
 
-	const newBuildVersion = parseInt(c.req.param('version')!)
-
-	if (!Number.isInteger(newBuildVersion) || newBuildVersion <= 0) {
-		return c.json({ message: `version must be a positive integer` }, 400)
-	}
-
-	if (newBuildVersion <= lastBuild) {
-		return c.json(
-			{
-				message: `build #${newBuildVersion} already exists`,
-				suggestedVersion: lastBuild + 1,
-				builds: existingBuilds,
-			},
-			400,
-		)
-	}
+	const newBuildVersion = Number.isInteger(lastBuildVersion) && lastBuildVersion > 0 ? lastBuildVersion + 1 : 1
 
 	const newBuildDir = path.join(envDir, newBuildVersion.toString())
 
-	if (lastBuild) {
-		fse.copySync(path.join(envDir, lastBuild.toString()), newBuildDir)
+	if (lastBuildVersion) {
+		fse.copySync(path.join(envDir, lastBuildVersion.toString()), newBuildDir)
+	} else {
+		fse.ensureDirSync(newBuildDir)
 	}
 
 	return c.json({
@@ -126,12 +118,14 @@ app.get('/:env/preDeploy/:version', (c) => {
 })
 
 // колбек после успешного деплоя нового билда в конкретное окружение
-app.get('/:env/postDeploy/:version', (c) => {
-	// TODO use bearer auth
+app.get('/postDeploy/:game/:env/:version', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const env = c.req.param('env')!
 
-	const envDir = path.join(GAME_ROOT, env)
+	const envDir = path.join(gameDir, env)
 
 	const deployedBuildVersion = c.req.param('version')
 
@@ -148,6 +142,11 @@ app.get('/:env/postDeploy/:version', (c) => {
 	let symlinkPath = path.join(envDir, 'latest')
 	fse.rmSync(symlinkPath, { force: true })
 	fse.symlinkSync(deployedBuildDir, symlinkPath)
+
+	const time = toReadableDateString(Date.now(), 'ms')
+	console.log(
+		`[${time}] Created symlink: ${path.relative(ENV.WEB_SERVER_DIR, symlinkPath)} -> ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)}`,
+	)
 
 	// TODO update modified date for deployed build dir
 
