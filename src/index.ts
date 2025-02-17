@@ -38,8 +38,33 @@ const GAME_ROOT = ENV.GAME_BUILDS_DIR
 
 const app = new Hono()
 
-// TODO setup custom logger - https://hono.dev/docs/middleware/builtin/logger#example
+// Add logger and auth middleware
 app.use(logger())
+
+// Add auth middleware
+app.use(async function authMiddleware(c: any, next: any) {
+	if (!ENV.AUTH_REQUIRED) {
+		return await next()
+	}
+
+	const authHeader = c.req.header('Authorization')
+
+	if (!authHeader) {
+		return c.json({ message: 'Authorization header is required' }, 401)
+	}
+
+	const [type, token] = authHeader.split(' ')
+
+	if (type !== 'Bearer') {
+		return c.json({ message: 'Bearer token is required' }, 401)
+	}
+
+	if (token !== ENV.BEARER_TOKEN) {
+		return c.json({ message: 'Invalid token' }, 401)
+	}
+
+	return await next()
+})
 
 app.get('/', (c) => c.text(GAME_ROOT))
 
