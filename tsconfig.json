@@ -1,9 +1,4 @@
 {
-  "compilerOptions": {
-    "strict": true,
-    "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
-    "esModuleInterop": true,
-    "moduleResolution": "Bundler"
-  }
+	"extends": "@tsconfig/bun/tsconfig.json",
+	"files": ["src/index.ts"]
 }

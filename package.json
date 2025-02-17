@@ -2,6 +2,7 @@
 	"name": "release-o-matic",
 	"scripts": {
 		"start": "bun run --hot src/index.ts",
+		"typecheck-dev": "bunx tsc --watch --noEmit",
 		"deploy": "pm2 deploy production"
 	},
 	"dependencies": {
@@ -19,7 +20,9 @@
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
-		"@types/bun": "latest"
+		"@tsconfig/bun": "^1.0.7",
+		"@types/bun": "latest",
+		"typescript": "^5.7.3"
 	},
 	"engines": {
 		"bun": "1.2.2"
