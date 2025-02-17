@@ -7,7 +7,9 @@ This is a simple API to manage deployments and releases of web games.
 
 Deployment is done with [PM2](https://pm2.keymetrics.io/docs/usage/deployment/).
 
-You will need to install Bun and PM2 on the host machine. Also, you will need to add SSH keys to host machine so it will be able to clone git repo with the project.
+You will need to install Bun and PM2 on the host machine. Refer to `package.json` for the Bun version used in the project.
+
+Also, you will need to add SSH keys to host machine so it will be able to clone git repo with the project.
 
 After that, you must run the following command to prepare the deployment:
 ```sh
@@ -33,7 +35,9 @@ your-domain.com {
 
 	# ...more settings...
 
+	# path relative to the root
 	handle_path /papa-cherry-2/releases* {
+		# notice that we have to specify the port here, use the same port as in the Bun server config
 		reverse_proxy localhost:4000
 	}
 }
