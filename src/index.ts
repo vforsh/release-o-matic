@@ -12,8 +12,18 @@ type Releases = {
 	builds: ReleaseInfo[]
 }
 
+/**
+ * Build key is a string that consists of env and build number
+ * For example: `master-12` or `develop-12`
+ */
+type BuildKey = `${string}-${number}`
+
+function isBuildKey(key: string): key is BuildKey {
+	return /^[a-zA-Z0-9_-]+-\d+$/.test(key)
+}
+
 type ReleaseInfo = {
-	key: string
+	key: BuildKey
 	index: string
 	files: string
 	releasedAt: string
@@ -29,10 +39,6 @@ type BuildInfo = {
 	builtAt: string
 }
 
-const GAME_ROOT = ENV.GAME_BUILDS_DIR
-
-// TODO переделать publish нового билда
-// TODO add README - why this does exist, how to setup deployment with PM2
 // TODO add tests
 
 const app = new Hono()
@@ -71,7 +77,7 @@ app.use(async function authMiddleware(c: any, next: any) {
 	return await next()
 })
 
-app.get('/', (c) => c.text(GAME_ROOT))
+app.get('/', (c) => c.text(ENV.GAME_BUILDS_DIR))
 
 app.get('/env', (c) => {
 	return c.json(ENV)
@@ -92,9 +98,15 @@ app.get('/preDeploy/:game/:env', (c) => {
 
 	fse.ensureDirSync(envDir)
 
+	// we need to filter out empty dirs bc user can call preDeploy but won't follow it with postDeploy
+	const isEmptyDir = (dirName: string) => {
+		const dirPath = path.join(envDir, dirName)
+		return fse.statSync(dirPath).isDirectory() && fse.readdirSync(dirPath).length > 0
+	}
+
 	const existingBuilds = fse
 		.readdirSync(envDir)
-		.filter((item) => fse.statSync(path.join(envDir, item)).isDirectory())
+		.filter((item) => isEmptyDir(item) === false)
 		.filter((item) => Number.isInteger(parseInt(item)))
 		.sort((a, b) => parseInt(a) - parseInt(b))
 
@@ -160,10 +172,14 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 })
 
 // инфо о всех билдах для конкретного окружения
-app.get('/:env/builds', (c) => {
+app.get('/:game/:env/builds', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
 	const env = c.req.param('env')
 
-	const envDir = path.join(GAME_ROOT, env)
+	const envDir = path.join(gameDir, env)
 
 	const existingBuilds = fse
 		.readdirSync(envDir)
@@ -182,9 +198,15 @@ app.get('/:env/builds', (c) => {
 	return c.json(existingBuilds)
 })
 
-// инфо о всех билдах
-app.get('/:platform', (c) => {
-	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
+// инфо о всех релизах для указанной игры и платформы
+app.get('/:game/:platform', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	const releasesDir = path.join(gameDir, 'prod', platform)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -203,16 +225,24 @@ app.get('/:platform', (c) => {
 })
 
 // публикация нового билда
-app.get('/:platform/publish/:build?', async (c) => {
-	let platform = c.req.param('platform')
+app.get('/:game/:platform/publish/:build?', async (c) => {
+	const game = c.req.param('game')
 
-	let buildKey = c.req.param('build') || getLatestMasterBuildKey()
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	let buildKey = c.req.param('build') || getLatestMasterBuildKey(gameDir)
 
 	if (!buildKey) {
 		return c.json({ message: `master build doesn't exist` }, 400)
 	}
 
-	let releasesJsonPath = path.join(GAME_ROOT, `prod/${platform}/releases.json`)
+	if (!isBuildKey(buildKey)) {
+		return c.json({ message: `invalid build key: ${buildKey}` }, 400)
+	}
+
+	let releasesJsonPath = path.join(gameDir, `prod/${platform}/releases.json`)
 	let releases: Releases = fse.existsSync(releasesJsonPath)
 		? fse.readJsonSync(releasesJsonPath)
 		: {
@@ -224,11 +254,11 @@ app.get('/:platform/publish/:build?', async (c) => {
 		return c.json({ message: `'${buildKey}' is already a current release` }, 400)
 	}
 
-	let srcDir = path.join(GAME_ROOT, 'master')
+	let srcDir = path.join(gameDir, 'master')
 
-	let destDir = path.join(GAME_ROOT, `prod/${platform}`)
+	let destDir = path.join(gameDir, `prod/${platform}`)
 
-	let destDirTemp = path.join(GAME_ROOT, `prod/${platform}_temp`)
+	let destDirTemp = path.join(gameDir, `prod/${platform}_temp`)
 
 	// копируем билд во временную папку
 	fse.ensureDirSync(destDirTemp)
@@ -272,10 +302,16 @@ app.get('/:platform/publish/:build?', async (c) => {
 	})
 })
 
-// инфо о текущем билде
-// TODO use same controller as for '/:platform/:build'
-app.get('/:platform/current', (c) => {
-	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
+// инфо о текущем релизе
+// TODO use same controller as for '/:game/:platform/:build'
+app.get('/:game/:platform/current', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	const releasesDir = path.join(gameDir, `prod/${platform}`)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -290,9 +326,15 @@ app.get('/:platform/current', (c) => {
 	return c.json(releases.builds.find((item) => item.key === releases.current))
 })
 
-// инфо о конкретном билде
-app.get('/:platform/:build', (c) => {
-	const releasesDir = path.join(GAME_ROOT, `prod/${c.req.param('platform')}`)
+// инфо о конкретном релизе
+app.get('/:game/:platform/:build', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	const releasesDir = path.join(gameDir, `prod/${platform}`)
 	if (!fse.existsSync(releasesDir)) {
 		return c.json({ message: `platform doesn't exist` }, 404)
 	}
@@ -322,18 +364,22 @@ app.get('/:platform/:build', (c) => {
 	})
 })
 
-// откат к какому-то из прошлых билдов
-app.get('/:platform/rollback/:build?', async (c) => {
-	let platform = c.req.param('platform')
+// откат к какому-то из прошлых релизов
+app.get('/:game/:platform/rollback/:build?', async (c) => {
+	const game = c.req.param('game')
 
-	let buildKey = c.req.param('build') || getPreviousBuildKey(platform)
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	let buildKey = c.req.param('build') || getPreviousBuildKey(gameDir, platform)
 
 	if (!buildKey) {
 		return c.json({ message: `there are no previous builds` }, 400)
 	}
 
 	let releasesDir = `prod/${platform}`
-	let releasesJsonPath = path.join(GAME_ROOT, `${releasesDir}/releases.json`)
+	let releasesJsonPath = path.join(gameDir, `${releasesDir}/releases.json`)
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
 
 	if (releases.current === buildKey) {
@@ -358,8 +404,8 @@ app.get('/:platform/rollback/:build?', async (c) => {
 	})
 })
 
-function getLatestMasterBuildKey(): string | undefined {
-	const masterDir = path.join(GAME_ROOT, 'master')
+function getLatestMasterBuildKey(gameDir: string): BuildKey | undefined {
+	const masterDir = path.join(gameDir, 'master')
 	const buildInfoPath = path.join(masterDir, 'build_info.json')
 	if (!fse.existsSync(buildInfoPath)) {
 		return undefined
@@ -367,14 +413,14 @@ function getLatestMasterBuildKey(): string | undefined {
 
 	const buildInfo = fse.readJsonSync(buildInfoPath) as BuildInfo
 
-	return 'master-' + buildInfo.version
+	return `master-${buildInfo.version}`
 }
 
 /**
  * @return {string} - key of the build that was published before the current one or undefined if there are no previous builds
  */
-function getPreviousBuildKey(platform: string): string | undefined {
-	const releasesDir = path.join(GAME_ROOT, `prod/${platform}`)
+function getPreviousBuildKey(gameDir: string, platform: string): string | undefined {
+	const releasesDir = path.join(gameDir, `prod/${platform}`)
 	const releasesJsonPath = path.join(releasesDir, 'releases.json')
 	if (!fse.existsSync(releasesJsonPath)) {
 		return undefined
@@ -399,7 +445,7 @@ function getPreviousBuildKey(platform: string): string | undefined {
 	return previousBuild?.key
 }
 
-function createNewRelease(buildKey: string, buildInfo: BuildInfo): ReleaseInfo {
+function createNewRelease(buildKey: BuildKey, buildInfo: BuildInfo): ReleaseInfo {
 	return {
 		key: buildKey,
 		index: `index_${buildKey}.html`,
