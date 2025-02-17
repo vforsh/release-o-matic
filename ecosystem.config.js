@@ -2,6 +2,7 @@ const BUN_DIR = '/root/.bun/bin'
 const BUN = `${BUN_DIR}/bun`
 
 const HOST = `robowhale.ru`
+// TODO move to /var/www/html/release-o-matic/
 const DEPLOY_DIR = `/var/www/html/papa-cherry-2/releases`
 
 /**
