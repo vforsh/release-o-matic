@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Dev",
+            "type": "shell",
+            "command": "bun",
+            "args": [
+                "run",
+                "--hot",
+                "src/index.ts"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Deploy",
+            "type": "shell",
+            "command": "pm2",
+            "args": [
+                "deploy",
+                "production"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": []
+        }
+    ]
+} 
