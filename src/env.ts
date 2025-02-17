@@ -1,6 +1,6 @@
 import { createEnv } from '@t3-oss/env-core'
-import { z } from 'zod'
 import path from 'path'
+import { z } from 'zod'
 
 export const env = createEnv({
 	/**
@@ -8,19 +8,23 @@ export const env = createEnv({
 	 * a type-level and at runtime.
 	 */
 	clientPrefix: '',
-	
+
 	client: {
 		BEARER_TOKEN: z.string().min(1),
 		WEB_SERVER_DIR: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
 		GAME_BUILDS_DIR: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
+		AUTH_REQUIRED: z
+			.enum(['true', 'false'])
+			.default('true')
+			.transform((val) => val === 'true'),
 	},
-	
+
 	/**
 	 * What object holds the environment variables at runtime. This is usually
 	 * `process.env` or `import.meta.env`.
 	 */
 	runtimeEnv: process.env,
-	
+
 	/**
 	 * By default, this library will feed the environment variables directly to
 	 * the Zod validator.
