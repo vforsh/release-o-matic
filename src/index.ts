@@ -38,7 +38,13 @@ const GAME_ROOT = ENV.GAME_BUILDS_DIR
 const app = new Hono()
 
 // Add logger and auth middleware
-app.use(logger())
+app.use(
+	logger((str, ...rest) => {
+		const time = toReadableDateString(Date.now(), 'ms')
+		console.log(`[${time}]`, str, ...rest)
+		return str
+	}),
+)
 
 // Add auth middleware
 app.use(async function authMiddleware(c: any, next: any) {
