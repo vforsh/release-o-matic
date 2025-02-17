@@ -8,7 +8,7 @@ import { env as ENV } from './env'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
 
 type Releases = {
-	current: string
+	current: string | null
 	builds: ReleaseInfo[]
 }
 
@@ -208,15 +208,22 @@ app.get('/:game/:platform', (c) => {
 
 	const releasesDir = path.join(gameDir, 'prod', platform)
 	if (!fse.existsSync(releasesDir)) {
-		return c.json({ message: `platform doesn't exist` }, 404)
+		const emptyReleases: Releases = {
+			current: null,
+			builds: [],
+		}
+
+		return c.json(emptyReleases)
 	}
 
 	const releasesJsonPath = path.join(releasesDir, 'releases.json')
 	if (!fse.existsSync(releasesJsonPath)) {
-		return c.json({
-			current: '',
+		const emptyReleases: Releases = {
+			current: null,
 			builds: [],
-		})
+		}
+
+		return c.json(emptyReleases)
 	}
 
 	const releases = fse.readJsonSync(releasesJsonPath) as Releases
