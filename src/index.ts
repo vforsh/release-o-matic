@@ -84,47 +84,52 @@ app.get('/env', (c) => {
 })
 
 // готовим новый билд к деплою в конкретное окружение
-// endpoint возвращает
-// - версию нового билда, которую нужно "вшить" в приложение
-// - директорию, в которую нужно положить билд (например, используя rsync)
-app.get('/preDeploy/:game/:env', (c) => {
+// endpoint возвращает директорию `newBuildDir`, в которую нужно положить билд (например, используя rsync)
+app.get('/preDeploy/:game/:env/:version', (c) => {
 	const game = c.req.param('game')
-
-	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const env = c.req.param('env')
 
-	const envDir = path.join(gameDir, env)
+	const build = parseInt(c.req.param('version'))
 
-	fse.ensureDirSync(envDir)
-
-	// we need to filter out empty dirs bc user can call preDeploy but won't follow it with postDeploy
-	const isEmptyDir = (dirName: string) => {
-		const dirPath = path.join(envDir, dirName)
-		return fse.statSync(dirPath).isDirectory() && fse.readdirSync(dirPath).length > 0
+	if (!Number.isInteger(build) || build <= 0) {
+		return c.json({ message: 'invalid version, must be a positive integer' }, 400)
 	}
+
+	const envDir = path.join(ENV.GAME_BUILDS_DIR, game, env)
+
+	const buildDir = path.join(envDir, build.toString())
 
 	const existingBuilds = fse
 		.readdirSync(envDir)
-		.filter((item) => isEmptyDir(item) === false)
-		.filter((item) => Number.isInteger(parseInt(item)))
-		.sort((a, b) => parseInt(a) - parseInt(b))
+		.filter((item) => isEmptyDir(path.join(envDir, item)) === false)
+		.map((item) => parseInt(item))
+		.filter((item) => Number.isInteger(item))
+		.sort((a, b) => a - b)
 
-	const lastBuildVersion = parseInt(existingBuilds.at(-1)!)
+	if (existingBuilds.includes(build)) {
+		return c.json(
+			{
+				message: `version #${build} already exists`,
+				newBuildVersion: existingBuilds.at(-1)! + 1,
+				builds: existingBuilds,
+			},
+			400,
+		)
+	}
 
-	const newBuildVersion = Number.isInteger(lastBuildVersion) && lastBuildVersion > 0 ? lastBuildVersion + 1 : 1
+	fse.ensureDirSync(buildDir)
 
-	const newBuildDir = path.join(envDir, newBuildVersion.toString())
-
+	const lastBuildVersion = existingBuilds.at(-1)
 	if (lastBuildVersion) {
-		fse.copySync(path.join(envDir, lastBuildVersion.toString()), newBuildDir)
+		fse.copySync(path.join(envDir, lastBuildVersion.toString()), buildDir)
 	} else {
-		fse.ensureDirSync(newBuildDir)
+		fse.ensureDirSync(buildDir)
 	}
 
 	return c.json({
-		newBuildVersion: newBuildVersion,
-		newBuildDir: newBuildDir,
+		newBuildVersion: build,
+		newBuildDir: buildDir,
 		builds: existingBuilds,
 	})
 })
@@ -410,6 +415,10 @@ app.get('/:game/:platform/rollback/:build?', async (c) => {
 		release: release,
 	})
 })
+
+function isEmptyDir(dirPath: string): boolean {
+	return fse.statSync(dirPath).isDirectory() && fse.readdirSync(dirPath).length === 0
+}
 
 function getLatestMasterBuildKey(gameDir: string): BuildKey | undefined {
 	const masterDir = path.join(gameDir, 'master')
