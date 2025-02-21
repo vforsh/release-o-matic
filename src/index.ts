@@ -100,6 +100,8 @@ app.get('/preDeploy/:game/:env/:version', (c) => {
 
 	const buildDir = path.join(envDir, build.toString())
 
+	fse.ensureDirSync(envDir)
+
 	const existingBuilds = fse
 		.readdirSync(envDir)
 		.filter((item) => isEmptyDir(path.join(envDir, item)) === false)
