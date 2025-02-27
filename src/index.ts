@@ -184,7 +184,7 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	const buildInfoResult = buildInfoSchema.safeParse(buildInfo)
 	if (!buildInfoResult.success) {
-		return c.json({ message: `build info file '${deployedBuildDir}/build_info.json' is invalid` }, 400)
+		return c.json({ message: `build info file is invalid`, errors: buildInfoResult.error.errors }, 400)
 	}
 
 	let symlinkPath = path.join(envDir, 'latest')
