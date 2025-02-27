@@ -7,11 +7,6 @@ import path from 'path'
 import { env as ENV } from './env'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
 
-type Releases = {
-	current: string | null
-	builds: ReleaseInfo[]
-}
-
 /**
  * Build key is a string that consists of env and build number
  * For example: `master-12` or `develop-12`
@@ -20,6 +15,30 @@ type BuildKey = `${string}-${number}`
 
 function isBuildKey(key: string): key is BuildKey {
 	return /^[a-zA-Z0-9_-]+-\d+$/.test(key)
+}
+
+function createBuildKey(env: string, version: number | string): BuildKey {
+	return `${env}-${version.toString()}` as BuildKey
+}
+
+function parseBuildKey(key: BuildKey): { env: string; version: number } {
+	const [env, version] = key.split('-')
+	return {
+		env,
+		version: parseInt(version),
+	}
+}
+
+type BuildInfo = {
+	version: number
+	builtAt: string
+	builtAtReadable: string
+	gitCommitHash: string
+	gitBranch: string
+}
+
+type DeployInfo = BuildInfo & {
+	deployedAt: string
 }
 
 type ReleaseInfo = {
@@ -32,14 +51,10 @@ type ReleaseInfo = {
 	gitCommit: string
 }
 
-type BuildInfo = {
-	version: number
-	branch: string
-	commit: string
-	builtAt: string
+type Releases = {
+	current: string | null
+	builds: ReleaseInfo[]
 }
-
-// TODO add tests
 
 const app = new Hono()
 
@@ -167,9 +182,22 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 		`[${time}] Created symlink: ${path.relative(ENV.WEB_SERVER_DIR, symlinkPath)} -> ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)}`,
 	)
 
-	// TODO update modified date for deployed build dir
+	// Update modified date for deployed build dir
+	const currentTime = new Date()
+	try {
+		fse.utimesSync(deployedBuildDir, currentTime, currentTime)
+		console.log(
+			`[${time}] Updated modified date for ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)} to ${toReadableDateString(currentTime.getTime())}`,
+		)
+	} catch (error) {
+		console.error(
+			`[${time}] Failed to update modified date for ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)}:`,
+			error,
+		)
+	}
 
-	// TODO remove old builds
+	const removedPaths = removeOldDeployments(envDir, { buildsNumToKeep: 10 })
+	console.log(`[${time}] Removed ${removedPaths.length} deployments: ${removedPaths.join(', ')}`)
 
 	return c.json({
 		buildVersion: deployedBuildVersion,
@@ -178,8 +206,8 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 	})
 })
 
-// инфо о всех билдах для конкретного окружения
-app.get('/:game/:env/builds', (c) => {
+// инфо о всех задеплоенных билдах для конкретного окружения
+app.get('/deployments/:game/:env', (c) => {
 	const game = c.req.param('game')
 
 	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
@@ -188,31 +216,144 @@ app.get('/:game/:env/builds', (c) => {
 
 	const envDir = path.join(gameDir, env)
 
+	if (!fse.existsSync(envDir)) {
+		return c.json({ message: `environment '${env}' doesn't exist` }, 404)
+	}
+
 	const existingBuilds = fse
 		.readdirSync(envDir)
 		.filter((item) => Number.isInteger(parseInt(item)) && fse.statSync(path.join(envDir, item)).isDirectory())
 		.sort((a, b) => parseInt(b) - parseInt(a))
-		.reduce((acc, item) => {
-			const filepath = path.join(envDir, item)
-			const key = path.relative(ENV.WEB_SERVER_DIR, filepath)
-			const modifiedAt = fse.statSync(filepath).mtime
-			acc[key] = toReadableDateString(modifiedAt.getTime())
-			return acc
-		}, {} as any)
+		.reduce((acc, version) => {
+			const dirpath = path.join(envDir, version)
+			const modifiedAt = fse.statSync(dirpath).mtime
+			const buildInfo = fse.readJsonSync(path.join(dirpath, 'build_info.json')) as BuildInfo
 
-	// TODO add info about latest symlink
+			acc.push({
+				version: parseInt(version),
+				gitBranch: buildInfo.gitBranch,
+				gitCommitHash: buildInfo.gitCommitHash,
+				builtAt: buildInfo.builtAt,
+				deployedAt: toReadableDateString(modifiedAt.getTime()),
+			} as DeployInfo)
+
+			return acc
+		}, [] as DeployInfo[])
 
 	return c.json(existingBuilds)
 })
 
+// инфо о текущем (последнем) задеплоенном билде
+app.get('/deployments/:game/:env/current', (c) => {
+	const game = c.req.param('game')
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+	const env = c.req.param('env')
+	const envDir = path.join(gameDir, env)
+
+	if (!fse.existsSync(envDir)) {
+		return c.json({ message: `environment '${env}' doesn't exist` }, 404)
+	}
+
+	// Check if 'latest' symlink exists
+	const latestSymlinkPath = path.join(envDir, 'latest')
+	if (!fse.existsSync(latestSymlinkPath)) {
+		return c.json({ message: `no current deployment for environment '${env}'` }, 404)
+	}
+
+	// Get the actual build directory the symlink points to
+	const currentBuildPath = fse.realpathSync(latestSymlinkPath)
+	const version = path.basename(currentBuildPath)
+
+	if (!Number.isInteger(parseInt(version))) {
+		return c.json({ message: `invalid current deployment for environment '${env}'` }, 500)
+	}
+
+	try {
+		const modifiedAt = fse.statSync(currentBuildPath).mtime
+		const buildInfo = fse.readJsonSync(path.join(currentBuildPath, 'build_info.json')) as BuildInfo
+
+		const deployInfo: DeployInfo = {
+			version: parseInt(version),
+			gitBranch: buildInfo.gitBranch,
+			gitCommitHash: buildInfo.gitCommitHash,
+			builtAt: buildInfo.builtAt,
+			builtAtReadable: buildInfo.builtAtReadable,
+			deployedAt: toReadableDateString(modifiedAt.getTime()),
+		}
+
+		return c.json(deployInfo)
+	} catch (error) {
+		return c.json(
+			{
+				message: `error reading current deployment info: ${error instanceof Error ? error.message : String(error)}`,
+				path: currentBuildPath,
+			},
+			500,
+		)
+	}
+})
+
+// инфо о конкретном задеплоенном билде
+app.get('/deployments/:game/:env/:version', (c) => {
+	const game = c.req.param('game')
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+	const env = c.req.param('env')
+	const envDir = path.join(gameDir, env)
+	const version = c.req.param('version')
+
+	if (!fse.existsSync(envDir)) {
+		return c.json({ message: `environment '${env}' doesn't exist` }, 404)
+	}
+
+	const buildDir = path.join(envDir, version)
+	if (!fse.existsSync(buildDir)) {
+		return c.json({ message: `build #${version} doesn't exist in environment '${env}'` }, 404)
+	}
+
+	try {
+		const modifiedAt = fse.statSync(buildDir).mtime
+		const buildInfo = fse.readJsonSync(path.join(buildDir, 'build_info.json')) as BuildInfo
+
+		// Check if this is the current deployment
+		const latestSymlinkPath = path.join(envDir, 'latest')
+		let isCurrent = false
+
+		if (fse.existsSync(latestSymlinkPath)) {
+			const currentBuildPath = fse.realpathSync(latestSymlinkPath)
+			isCurrent = currentBuildPath === buildDir
+		}
+
+		const deployInfo: DeployInfo & { isCurrent: boolean } = {
+			version: parseInt(version),
+			gitBranch: buildInfo.gitBranch,
+			gitCommitHash: buildInfo.gitCommitHash,
+			builtAt: buildInfo.builtAt,
+			builtAtReadable: buildInfo.builtAtReadable,
+			deployedAt: toReadableDateString(modifiedAt.getTime()),
+			isCurrent,
+		}
+
+		return c.json(deployInfo)
+	} catch (error) {
+		return c.json(
+			{
+				message: `error reading deployment info: ${error instanceof Error ? error.message : String(error)}`,
+				path: buildDir,
+			},
+			500,
+		)
+	}
+})
+
 // инфо о всех релизах для указанной игры и платформы
-app.get('/:game/:platform', (c) => {
+app.get('/releases/:game/:platform', (c) => {
 	const game = c.req.param('game')
 
 	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const platform = c.req.param('platform')
 
+	// директория с релизами для указанной платформы
 	const releasesDir = path.join(gameDir, 'prod', platform)
 	if (!fse.existsSync(releasesDir)) {
 		const emptyReleases: Releases = {
@@ -238,18 +379,79 @@ app.get('/:game/:platform', (c) => {
 	return c.json(releases)
 })
 
-// публикация нового билда
-app.get('/:game/:platform/publish/:build?', async (c) => {
+// инфо о текущем релизе
+app.get('/releases/:game/:platform/current', (c) => {
 	const game = c.req.param('game')
 
 	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const platform = c.req.param('platform')
 
-	let buildKey = c.req.param('build') || getLatestMasterBuildKey(gameDir)
+	const releasesDir = path.join(gameDir, `prod`, platform)
+	if (!fse.existsSync(releasesDir)) {
+		return c.json({ message: `platform '${platform}' doesn't exist` }, 404)
+	}
+
+	const releasesJsonPath = path.join(releasesDir, 'releases.json')
+	if (!fse.existsSync(releasesJsonPath)) {
+		return c.json({ message: `there are no published builds for platform '${platform}'` }, 404)
+	}
+
+	const releases = fse.readJsonSync(releasesJsonPath) as Releases
+
+	return c.json(releases.builds.find((item) => item.key === releases.current))
+})
+
+// инфо о конкретном релизе, например, `master-11`
+app.get('/releases/:game/:platform/:buildKey', (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	const releasesDir = path.join(gameDir, `prod`, platform)
+	if (!fse.existsSync(releasesDir)) {
+		return c.json({ message: `platform '${platform}' doesn't exist` }, 404)
+	}
+
+	const releasesJsonPath = path.join(releasesDir, 'releases.json')
+	if (!fse.existsSync(releasesJsonPath)) {
+		return c.json({ message: `there are no published builds for platform '${platform}'` }, 404)
+	}
+
+	const buildKey = c.req.param('buildKey')
+
+	const releases = fse.readJsonSync(releasesJsonPath) as Releases
+
+	const release = releases.builds.find((item) => item.key === buildKey)
+	if (!release) {
+		return c.json({ message: `release '${buildKey}' doesn't exist` }, 404)
+	}
+
+	// @ts-expect-error
+	const filesJsonPath = path.join(releasesDir)
+	const files = fse.readJsonSync(path.join(releasesDir, `files_${buildKey}.json`))
+
+	return c.json({
+		...release,
+		isCurrent: releases.current === buildKey,
+		filesList: files,
+	})
+})
+
+// публикация нового билда
+app.get('/publish/:game/:platform/:buildKey?', async (c) => {
+	const game = c.req.param('game')
+
+	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
+	const platform = c.req.param('platform')
+
+	let buildKey = c.req.param('buildKey') || getLatestMasterBuildKey(gameDir)
 
 	if (!buildKey) {
-		return c.json({ message: `master build doesn't exist` }, 400)
+		return c.json({ message: `build doesn't exist` }, 400)
 	}
 
 	if (!isBuildKey(buildKey)) {
@@ -264,11 +466,18 @@ app.get('/:game/:platform/publish/:build?', async (c) => {
 				builds: [],
 			}
 
-	if (releases.current === buildKey) {
-		return c.json({ message: `'${buildKey}' is already a current release` }, 400)
+	const existingRelease = releases.builds.find((item) => item.key === buildKey)
+	if (existingRelease) {
+		return c.json({ message: `'${buildKey}' was already released at ${existingRelease.releasedAt}` }, 400)
 	}
 
-	let srcDir = path.join(gameDir, 'master')
+	const { env, version } = parseBuildKey(buildKey)
+
+	let srcDir = path.join(gameDir, env, version.toString())
+
+	if (!fse.existsSync(srcDir)) {
+		return c.json({ message: `build '${buildKey}' doesn't exist` }, 404)
+	}
 
 	let destDir = path.join(gameDir, `prod/${platform}`)
 
@@ -316,80 +525,22 @@ app.get('/:game/:platform/publish/:build?', async (c) => {
 	})
 })
 
-// инфо о текущем релизе
-// TODO use same controller as for '/:game/:platform/:build'
-app.get('/:game/:platform/current', (c) => {
-	const game = c.req.param('game')
-
-	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
-
-	const platform = c.req.param('platform')
-
-	const releasesDir = path.join(gameDir, `prod/${platform}`)
-	if (!fse.existsSync(releasesDir)) {
-		return c.json({ message: `platform doesn't exist` }, 404)
-	}
-
-	const releasesJsonPath = path.join(releasesDir, 'releases.json')
-	if (!fse.existsSync(releasesJsonPath)) {
-		return c.json({ message: `there are no published build` }, 404)
-	}
-
-	const releases = fse.readJsonSync(releasesJsonPath) as Releases
-
-	return c.json(releases.builds.find((item) => item.key === releases.current))
-})
-
-// инфо о конкретном релизе
-app.get('/:game/:platform/:build', (c) => {
-	const game = c.req.param('game')
-
-	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
-
-	const platform = c.req.param('platform')
-
-	const releasesDir = path.join(gameDir, `prod/${platform}`)
-	if (!fse.existsSync(releasesDir)) {
-		return c.json({ message: `platform doesn't exist` }, 404)
-	}
-
-	const releasesJsonPath = path.join(releasesDir, 'releases.json')
-	if (!fse.existsSync(releasesJsonPath)) {
-		return c.json({ message: `there are no published build` }, 404)
-	}
-
-	const buildKey = c.req.param('build')
-
-	const releases = fse.readJsonSync(releasesJsonPath) as Releases
-
-	const release = releases.builds.find((item) => item.key === buildKey)
-	if (!release) {
-		return c.json({ message: `build doesn't exist` }, 404)
-	}
-
-	// @ts-expect-error
-	const filesJsonPath = path.join(releasesDir)
-	const files = fse.readJsonSync(path.join(releasesDir, `files_${buildKey}.json`))
-
-	return c.json({
-		...release,
-		isCurrent: releases.current === buildKey,
-		filesList: files,
-	})
-})
-
 // откат к какому-то из прошлых релизов
-app.get('/:game/:platform/rollback/:build?', async (c) => {
+app.get('/rollback/:game/:platform/:buildKey?', async (c) => {
 	const game = c.req.param('game')
 
 	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
 
 	const platform = c.req.param('platform')
 
-	let buildKey = c.req.param('build') || getPreviousBuildKey(gameDir, platform)
+	let buildKey = c.req.param('buildKey') || getPreviousBuildKey(gameDir, platform)
 
 	if (!buildKey) {
 		return c.json({ message: `there are no previous builds` }, 400)
+	}
+
+	if (!isBuildKey(buildKey)) {
+		return c.json({ message: `invalid build key: ${buildKey}` }, 400)
 	}
 
 	let releasesDir = `prod/${platform}`
@@ -397,12 +548,12 @@ app.get('/:game/:platform/rollback/:build?', async (c) => {
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
 
 	if (releases.current === buildKey) {
-		return c.json({ message: `build ${buildKey} is already active` }, 304)
+		return c.json({ message: `build ${buildKey} is current release` }, 304)
 	}
 
 	let release = releases.builds.find((item) => item.key === buildKey)
 	if (!release) {
-		return c.json({ message: `build '${buildKey}' doesn't exist` }, 404)
+		return c.json({ message: `release '${buildKey}' doesn't exist` }, 404)
 	}
 
 	// update releases.json
@@ -413,7 +564,7 @@ app.get('/:game/:platform/rollback/:build?', async (c) => {
 	updateIndexHtmlSymlink(releasesDir, buildKey)
 
 	return c.json({
-		path: '',
+		path: releasesDir,
 		release: release,
 	})
 })
@@ -431,7 +582,7 @@ function getLatestMasterBuildKey(gameDir: string): BuildKey | undefined {
 
 	const buildInfo = fse.readJsonSync(buildInfoPath) as BuildInfo
 
-	return `master-${buildInfo.version}`
+	return createBuildKey('master', buildInfo.version)
 }
 
 /**
@@ -470,9 +621,36 @@ function createNewRelease(buildKey: BuildKey, buildInfo: BuildInfo): ReleaseInfo
 		files: `files_${buildKey}.json`,
 		releasedAt: toReadableDateString(Date.now()),
 		builtAt: buildInfo.builtAt,
-		gitBranch: buildInfo.branch,
-		gitCommit: buildInfo.commit,
+		gitBranch: buildInfo.gitBranch,
+		gitCommit: buildInfo.gitCommitHash,
 	}
+}
+
+/**
+ * Removes old deployments from the environment directory
+ * @param envDir - path to the environment directory
+ * @param options - options
+ * @returns array of removed paths
+ */
+function removeOldDeployments(envDir: string, options: { buildsNumToKeep: number }): string[] {
+	const allBuilds = fse
+		.readdirSync(envDir)
+		.filter((item) => Number.isInteger(parseInt(item)) && fse.statSync(path.join(envDir, item)).isDirectory())
+		.sort((a, b) => parseInt(b) - parseInt(a))
+
+	// Keep the newest builds (highest numbers)
+	const buildsToKeep = allBuilds.slice(0, options.buildsNumToKeep)
+	const buildsToRemove = allBuilds.slice(options.buildsNumToKeep)
+
+	const removedPaths: string[] = []
+
+	buildsToRemove.forEach((build) => {
+		const buildPath = path.join(envDir, build)
+		fse.rmSync(buildPath, { recursive: true })
+		removedPaths.push(buildPath)
+	})
+
+	return removedPaths
 }
 
 async function removeOldReleases(releasesJsonPath: string, buildsNumToKeep = 5) {
