@@ -7,6 +7,7 @@ import path from 'path'
 import { z } from 'zod'
 import { env as ENV } from './env'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
+import { getErrorLog } from './utils/error/utils'
 
 /**
  * Build key is a string that consists of env and build number
@@ -311,14 +312,14 @@ app.get('/deployments/:game/:env/current', (c) => {
 app.get('/deployments/:game/:env/:version', (c) => {
 	const game = c.req.param('game')
 	const gameDir = path.join(ENV.GAME_BUILDS_DIR, game)
+
 	const env = c.req.param('env')
 	const envDir = path.join(gameDir, env)
-	const version = c.req.param('version')
-
 	if (!fse.existsSync(envDir)) {
 		return c.json({ message: `environment '${env}' doesn't exist` }, 404)
 	}
 
+	const version = c.req.param('version')
 	const buildDir = path.join(envDir, version)
 	if (!fse.existsSync(buildDir)) {
 		return c.json({ message: `build #${version} doesn't exist in environment '${env}'` }, 404)
@@ -351,7 +352,7 @@ app.get('/deployments/:game/:env/:version', (c) => {
 	} catch (error) {
 		return c.json(
 			{
-				message: `error reading deployment info: ${error instanceof Error ? error.message : String(error)}`,
+				message: `error reading deployments info (${getErrorLog(error)})`,
 				path: buildDir,
 			},
 			500,
@@ -654,7 +655,7 @@ function removeOldDeployments(envDir: string, options: { buildsNumToKeep: number
 
 	// @ts-expect-error
 	const buildsToKeep = allBuilds.slice(0, options.buildsNumToKeep)
-	
+
 	const buildsToRemove = allBuilds.slice(options.buildsNumToKeep)
 
 	const removedPaths: string[] = []
