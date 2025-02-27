@@ -237,7 +237,12 @@ app.get('/deployments/:game/:env', (c) => {
 
 	const existingBuilds = fse
 		.readdirSync(envDir)
-		.filter((item) => Number.isInteger(parseInt(item)) && fse.statSync(path.join(envDir, item)).isDirectory())
+		.filter(
+			(buildVersionStr) =>
+				Number.isInteger(parseInt(buildVersionStr)) &&
+				fse.statSync(path.join(envDir, buildVersionStr)).isDirectory() &&
+				fse.existsSync(path.join(envDir, buildVersionStr, 'build_info.json')),
+		)
 		.sort((a, b) => parseInt(b) - parseInt(a))
 		.reduce((acc, version) => {
 			const dirpath = path.join(envDir, version)
