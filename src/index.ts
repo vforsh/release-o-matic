@@ -31,11 +31,11 @@ function parseBuildKey(key: BuildKey): { env: string; version: number } {
 }
 
 const buildInfoSchema = z.object({
-	version: z.number(),
-	builtAt: z.string(),
-	builtAtReadable: z.string(),
-	gitCommitHash: z.string(),
-	gitBranch: z.string(),
+	version: z.number().describe('build version'),
+	builtAt: z.number().describe('build timestamp'),
+	builtAtReadable: z.string().describe('build timestamp in readable format'),
+	gitCommitHash: z.string().describe('git commit hash'),
+	gitBranch: z.string().describe('git branch'),
 })
 
 type BuildInfo = z.infer<typeof buildInfoSchema>
