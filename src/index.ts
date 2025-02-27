@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { logger } from 'hono/logger'
 import { without } from 'lodash-es'
 import path from 'path'
+import { z } from 'zod'
 import { env as ENV } from './env'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
 
@@ -29,13 +30,15 @@ function parseBuildKey(key: BuildKey): { env: string; version: number } {
 	}
 }
 
-type BuildInfo = {
-	version: number
-	builtAt: string
-	builtAtReadable: string
-	gitCommitHash: string
-	gitBranch: string
-}
+const buildInfoSchema = z.object({
+	version: z.number(),
+	builtAt: z.string(),
+	builtAtReadable: z.string(),
+	gitCommitHash: z.string(),
+	gitBranch: z.string(),
+})
+
+type BuildInfo = z.infer<typeof buildInfoSchema>
 
 type DeployInfo = BuildInfo & {
 	deployedAt: string
@@ -171,6 +174,17 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	if (!fse.existsSync(deployedBuildDir)) {
 		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
+	}
+
+	const buildInfoPath = path.join(deployedBuildDir, 'build_info.json')
+	const buildInfo = fse.existsSync(buildInfoPath) ? (fse.readJsonSync(buildInfoPath) as BuildInfo) : null
+	if (!buildInfo) {
+		return c.json({ message: `build info file '${deployedBuildDir}/build_info.json' is missing` }, 404)
+	}
+
+	const buildInfoResult = buildInfoSchema.safeParse(buildInfo)
+	if (!buildInfoResult.success) {
+		return c.json({ message: `build info file '${deployedBuildDir}/build_info.json' is invalid` }, 400)
 	}
 
 	let symlinkPath = path.join(envDir, 'latest')
