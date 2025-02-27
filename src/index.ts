@@ -634,7 +634,7 @@ function createNewRelease(buildKey: BuildKey, buildInfo: BuildInfo): ReleaseInfo
 		index: `index_${buildKey}.html`,
 		files: `files_${buildKey}.json`,
 		releasedAt: toReadableDateString(Date.now()),
-		builtAt: buildInfo.builtAt,
+		builtAt: buildInfo.builtAtReadable,
 		gitBranch: buildInfo.gitBranch,
 		gitCommit: buildInfo.gitCommitHash,
 	}
