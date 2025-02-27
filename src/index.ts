@@ -652,8 +652,9 @@ function removeOldDeployments(envDir: string, options: { buildsNumToKeep: number
 		.filter((item) => Number.isInteger(parseInt(item)) && fse.statSync(path.join(envDir, item)).isDirectory())
 		.sort((a, b) => parseInt(b) - parseInt(a))
 
-	// Keep the newest builds (highest numbers)
+	// @ts-expect-error
 	const buildsToKeep = allBuilds.slice(0, options.buildsNumToKeep)
+	
 	const buildsToRemove = allBuilds.slice(options.buildsNumToKeep)
 
 	const removedPaths: string[] = []
