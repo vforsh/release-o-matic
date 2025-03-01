@@ -1,6 +1,5 @@
 {
 	"name": "release-o-matic",
-	"type": "module",
 	"scripts": {
 		"start": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
