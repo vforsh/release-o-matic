@@ -2,6 +2,7 @@ import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockEnv } from '../mocks/env'
 import { mockFsExtra, resetFsExtra } from '../mocks/fs-extra'
+import { vol } from 'memfs'
 
 // Mock file system operations
 vi.mock('fs-extra', () => mockFsExtra())
@@ -36,17 +37,23 @@ describe('/publish endpoints', () => {
 		// Reset filesystem before each test
 		resetFsExtra()
 
-		// Set up test directory structure and files
-		const buildDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'master', BUILD_VERSION.toString())
-		const masterDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'master')
+		// Define file structure for initial setup
+		const fileStructure = {
+			[mockEnv.GAME_BUILDS_DIR]: {
+				[GAME]: {
+					master: {
+						[BUILD_VERSION.toString()]: {
+							'build_info.json': JSON.stringify(buildInfo),
+							'index.html': '<html>Test</html>',
+						},
+						'build_info.json': JSON.stringify(buildInfo),
+					},
+				},
+			},
+		}
 
-		// Create necessary directories and files
-		fse.ensureDirSync(buildDir)
-		fse.outputJsonSync(path.join(buildDir, 'build_info.json'), buildInfo)
-		fse.writeFileSync(path.join(buildDir, 'index.html'), '<html>Test</html>')
-
-		// Create master/build_info.json for getLatestMasterBuildKey
-		fse.outputJsonSync(path.join(masterDir, 'build_info.json'), buildInfo)
+		// Create the file structure
+		vol.fromNestedJSON(fileStructure, '/')
 	})
 
 	afterEach(() => {
@@ -93,10 +100,8 @@ describe('/publish endpoints', () => {
 				],
 			})
 
-			// Now we can also verify the number of operations performed
-			expect(fse.writeFileSync).toHaveBeenCalled()
-			expect(fse.symlinkSync).toHaveBeenCalled()
-			expect(fse.outputJsonSync).toHaveBeenCalled()
+			// Verify symlink was created
+			expect(fse.existsSync(path.join(prodDir, 'index.html'))).toBe(true)
 		})
 
 		it('should fail if build does not exist', async () => {

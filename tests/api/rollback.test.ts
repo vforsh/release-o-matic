@@ -2,6 +2,7 @@ import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockEnv } from '../mocks/env'
 import { mockFsExtra, resetFsExtra } from '../mocks/fs-extra'
+import { vol } from 'memfs'
 
 // Mock file system operations
 vi.mock('fs-extra', () => mockFsExtra())
@@ -36,40 +37,43 @@ describe('/rollback endpoints', () => {
 		// Reset filesystem before each test
 		resetFsExtra()
 
-		// Set up initial build directory structure and files
-		const buildDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'master', BUILD_VERSION.toString())
-		const masterDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'master')
-		const prodDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'prod', PLATFORM)
+		// Define file structure for initial setup
+		const fileStructure = {
+			[mockEnv.GAME_BUILDS_DIR]: {
+				[GAME]: {
+					master: {
+						[BUILD_VERSION.toString()]: {
+							'build_info.json': JSON.stringify(buildInfo),
+							'index.html': '<html>Test</html>',
+						},
+						// 'build_info.json': JSON.stringify(buildInfo),
+						[(BUILD_VERSION + 1).toString()]: {
+							'build_info.json': JSON.stringify({
+								...buildInfo,
+								version: BUILD_VERSION + 1,
+								gitCommitHash: 'def456',
+							}),
+							'index.html': '<html>New Test</html>',
+						},
+					},
+					prod: {
+						[PLATFORM]: {
+							[`index_${BUILD_KEY}.html`]: '<html>Test</html>',
+							[`files_${BUILD_KEY}.json`]: JSON.stringify(['index.html']),
+						},
+					},
+				},
+			},
+		}
 
-		// Create necessary directories and files for the first build
-		fse.ensureDirSync(buildDir)
-		fse.outputJsonSync(path.join(buildDir, 'build_info.json'), buildInfo)
-		fse.writeFileSync(path.join(buildDir, 'index.html'), '<html>Test</html>')
-		fse.outputJsonSync(path.join(masterDir, 'build_info.json'), buildInfo)
+		// Create the file structure
+		vol.fromNestedJSON(fileStructure, '/')
 
 		// First publish a build to have something to rollback to
 		await app.fetch(new Request(`http://localhost/publish/${GAME}/${PLATFORM}/${BUILD_KEY}`))
 
-		// Ensure the prod directory exists and has the necessary files
-		fse.ensureDirSync(prodDir)
-		fse.writeFileSync(path.join(prodDir, `index_${BUILD_KEY}.html`), '<html>Test</html>')
-		fse.outputJsonSync(path.join(prodDir, `files_${BUILD_KEY}.json`), ['index.html'])
-
 		// Publish another build to make the first one "previous"
-		const newBuildVersion = BUILD_VERSION + 1
-		const newBuildKey = `master-${newBuildVersion}`
-		const newBuildDir = path.join(mockEnv.GAME_BUILDS_DIR, GAME, 'master', newBuildVersion.toString())
-
-		// Create new build directory and files
-		fse.ensureDirSync(newBuildDir)
-		fse.outputJsonSync(path.join(newBuildDir, 'build_info.json'), {
-			...buildInfo,
-			version: newBuildVersion,
-			gitCommitHash: 'def456',
-		})
-		fse.writeFileSync(path.join(newBuildDir, 'index.html'), '<html>New Test</html>')
-
-		// Publish the new build
+		const newBuildKey = `master-${BUILD_VERSION + 1}`
 		await app.fetch(new Request(`http://localhost/publish/${GAME}/${PLATFORM}/${newBuildKey}`))
 
 		// Reset mock call history but keep filesystem state
