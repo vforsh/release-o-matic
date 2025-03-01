@@ -563,12 +563,12 @@ app.get('/rollback/:game/:platform/:buildKey?', async (c) => {
 		return c.json({ message: `invalid build key: ${buildKey}` }, 400)
 	}
 
-	let releasesDir = `prod/${platform}`
-	let releasesJsonPath = path.join(gameDir, `${releasesDir}/releases.json`)
+	let releasesDir = path.join(gameDir, `prod/${platform}`)
+	let releasesJsonPath = path.join(releasesDir, 'releases.json')
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
 
 	if (releases.current === buildKey) {
-		return c.json({ message: `build ${buildKey} is current release` }, 304)
+		return c.json({ message: `build ${buildKey} is current release` }, 400)
 	}
 
 	let release = releases.builds.find((item) => item.key === buildKey)
@@ -584,7 +584,7 @@ app.get('/rollback/:game/:platform/:buildKey?', async (c) => {
 	updateIndexHtmlSymlink(releasesDir, buildKey)
 
 	return c.json({
-		path: releasesDir,
+		path: path.relative(gameDir, releasesDir),
 		release: release,
 	})
 })
