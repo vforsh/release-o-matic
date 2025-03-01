@@ -468,7 +468,7 @@ app.get('/publish/:game/:platform/:buildKey?', async (c) => {
 
 	const platform = c.req.param('platform')
 
-	let buildKey = c.req.param('buildKey') || getLatestMasterBuildKey(gameDir)
+	let buildKey = c.req.param('buildKey') || getLatestBuildKey(gameDir, 'master') || getLatestBuildKey(gameDir, 'main')
 
 	if (!buildKey) {
 		return c.json({ message: `build doesn't exist` }, 400)
@@ -553,10 +553,10 @@ app.get('/rollback/:game/:platform/:buildKey?', async (c) => {
 
 	const platform = c.req.param('platform')
 
-	let buildKey = c.req.param('buildKey') || getPreviousBuildKey(gameDir, platform)
+	let buildKey = c.req.param('buildKey') || getPreviousReleaseBuildKey(gameDir, platform)
 
 	if (!buildKey) {
-		return c.json({ message: `there are no previous builds` }, 400)
+		return c.json({ message: `there are no previous releases` }, 400)
 	}
 
 	if (!isBuildKey(buildKey)) {
@@ -593,22 +593,23 @@ function isEmptyDir(dirPath: string): boolean {
 	return fse.statSync(dirPath).isDirectory() && fse.readdirSync(dirPath).length === 0
 }
 
-function getLatestMasterBuildKey(gameDir: string): BuildKey | undefined {
-	const masterDir = path.join(gameDir, 'master')
-	const buildInfoPath = path.join(masterDir, 'build_info.json')
-	if (!fse.existsSync(buildInfoPath)) {
+function getLatestBuildKey(gameDir: string, env: string): BuildKey | undefined {
+	const builds = fse
+		.readdirSync(path.join(gameDir, env))
+		.filter((item) => Number.isInteger(parseInt(item)) && fse.statSync(path.join(gameDir, env, item)).isDirectory())
+		.sort((a, b) => parseInt(b) - parseInt(a))
+
+	if (builds.length === 0) {
 		return undefined
 	}
 
-	const buildInfo = fse.readJsonSync(buildInfoPath) as BuildInfo
-
-	return createBuildKey('master', buildInfo.version)
+	return createBuildKey(env, builds[0])
 }
 
 /**
  * @return {string} - key of the build that was published before the current one or undefined if there are no previous builds
  */
-function getPreviousBuildKey(gameDir: string, platform: string): string | undefined {
+function getPreviousReleaseBuildKey(gameDir: string, platform: string): BuildKey | undefined {
 	const releasesDir = path.join(gameDir, `prod/${platform}`)
 	const releasesJsonPath = path.join(releasesDir, 'releases.json')
 	if (!fse.existsSync(releasesJsonPath)) {
@@ -618,20 +619,20 @@ function getPreviousBuildKey(gameDir: string, platform: string): string | undefi
 	const releases = fse.readJsonSync(releasesJsonPath) as Releases
 
 	// sort builds by date from newest to oldest
-	const buildsSortedByDate = releases.builds.sort((a, b) => {
+	const releasesSortedByDate = releases.builds.sort((a, b) => {
 		return fromReadableDateString(b.releasedAt) - fromReadableDateString(a.releasedAt)
 	})
 
-	const currentBuild = buildsSortedByDate.find((item) => item.key === releases.current)
-	if (!currentBuild) {
+	const currentRelease = releasesSortedByDate.find((item) => item.key === releases.current)
+	if (!currentRelease) {
 		return undefined
 	}
 
-	const currentBuildIndex = buildsSortedByDate.indexOf(currentBuild)
+	const currentReleaseIndex = releasesSortedByDate.indexOf(currentRelease)
 
-	const previousBuild = buildsSortedByDate.at(currentBuildIndex - 1)
+	const previousRelease = releasesSortedByDate.at(currentReleaseIndex - 1)
 
-	return previousBuild?.key
+	return previousRelease?.key
 }
 
 function createNewRelease(buildKey: BuildKey, buildInfo: BuildInfo): ReleaseInfo {
