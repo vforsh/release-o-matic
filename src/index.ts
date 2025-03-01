@@ -630,7 +630,7 @@ function getPreviousReleaseBuildKey(gameDir: string, platform: string): BuildKey
 
 	const currentReleaseIndex = releasesSortedByDate.indexOf(currentRelease)
 
-	const previousRelease = releasesSortedByDate.at(currentReleaseIndex - 1)
+	const previousRelease = releasesSortedByDate.at(currentReleaseIndex + 1)
 
 	return previousRelease?.key
 }
