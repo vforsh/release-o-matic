@@ -42,3 +42,8 @@ your-domain.com {
 	}
 }
 ```
+
+
+## Testing
+
+Use `bun run test` instead of `bun test`. Because `bun test` uses the Bun test runner but we use `vitest` for the current project.
