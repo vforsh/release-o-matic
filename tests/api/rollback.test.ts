@@ -1,8 +1,8 @@
+import { vol } from 'memfs'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockEnv } from '../mocks/env'
 import { mockFsExtra, resetFsExtra } from '../mocks/fs-extra'
-import { vol } from 'memfs'
 
 // Mock file system operations
 vi.mock('fs-extra', () => mockFsExtra())
@@ -33,6 +33,8 @@ describe('/rollback endpoints', () => {
 		gitBranch: 'master',
 	}
 
+	const rollback = (pathname: string) => app.fetch(new Request(`http://localhost/rollback/${pathname}`))
+
 	beforeEach(async () => {
 		// Reset filesystem before each test
 		resetFsExtra()
@@ -46,7 +48,6 @@ describe('/rollback endpoints', () => {
 							'build_info.json': JSON.stringify(buildInfo),
 							'index.html': '<html>Test</html>',
 						},
-						// 'build_info.json': JSON.stringify(buildInfo),
 						[(BUILD_VERSION + 1).toString()]: {
 							'build_info.json': JSON.stringify({
 								...buildInfo,
@@ -87,7 +88,7 @@ describe('/rollback endpoints', () => {
 
 	describe('GET /rollback/:game/:platform/:buildKey?', () => {
 		it('should rollback to a specific build successfully', async () => {
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}/${BUILD_KEY}`))
+			const response = await rollback(`${GAME}/${PLATFORM}/${BUILD_KEY}`)
 
 			expect(response.status).toBe(200)
 
@@ -113,7 +114,7 @@ describe('/rollback endpoints', () => {
 		})
 
 		it('should rollback to previous build when no buildKey provided', async () => {
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}`))
+			const response = await rollback(`${GAME}/${PLATFORM}`)
 
 			expect(response.status).toBe(200)
 
@@ -127,7 +128,7 @@ describe('/rollback endpoints', () => {
 		})
 
 		it('should fail with invalid build key format', async () => {
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}/invalid-key`))
+			const response = await rollback(`${GAME}/${PLATFORM}/invalid-key`)
 
 			expect(response.status).toBe(400)
 			const data = await response.json()
@@ -135,7 +136,7 @@ describe('/rollback endpoints', () => {
 		})
 
 		it('should fail if build does not exist', async () => {
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}/master-999`))
+			const response = await rollback(`${GAME}/${PLATFORM}/master-999`)
 
 			expect(response.status).toBe(404)
 			const data = await response.json()
@@ -144,13 +145,13 @@ describe('/rollback endpoints', () => {
 
 		it('should not rollback to current build', async () => {
 			// First rollback to BUILD_KEY
-			await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}/${BUILD_KEY}`))
+			await rollback(`${GAME}/${PLATFORM}/${BUILD_KEY}`)
 
 			// Clear mocks
 			vi.clearAllMocks()
 
 			// Try to rollback to the same build again
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}/${BUILD_KEY}`))
+			const response = await rollback(`${GAME}/${PLATFORM}/${BUILD_KEY}`)
 
 			// Note: Changed from 304 to 400 since Hono doesn't support 304 with body
 			expect(response.status).toBe(400)
@@ -166,11 +167,11 @@ describe('/rollback endpoints', () => {
 			// Reset the filesystem to have no builds
 			resetFsExtra()
 
-			const response = await app.fetch(new Request(`http://localhost/rollback/${GAME}/${PLATFORM}`))
+			const response = await rollback(`${GAME}/${PLATFORM}`)
 
 			expect(response.status).toBe(400)
 			const data = await response.json()
-			expect(data.message).toContain('there are no previous builds')
+			expect(data.message).toContain('there are no previous releases')
 		})
 	})
 })

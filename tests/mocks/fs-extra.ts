@@ -60,13 +60,13 @@ export function mockFsExtra() {
 			vol.utimesSync(path, atime, mtime)
 		}),
 		statSync: vi.fn((path) => {
-			const stats = vol.statSync(path)
+			const stats = vol.lstatSync(path)
 			return {
 				...stats,
 				isDirectory: () => stats.isDirectory(),
 				isFile: () => stats.isFile(),
 				isSymbolicLink: () => stats.isSymbolicLink(),
-				mtime: new Date(),
+				mtime: stats.mtime || new Date(),
 			}
 		}),
 		renameSync: vi.fn((oldPath, newPath) => {
@@ -82,6 +82,12 @@ export function mockFsExtra() {
 		writeFileSync: vi.fn((file, data, options = {}) => {
 			vol.mkdirSync(path.dirname(file), { recursive: true })
 			vol.writeFileSync(file, data, options)
+		}),
+		readlink: vi.fn((path) => {
+			return Promise.resolve(vol.readlinkSync(path))
+		}),
+		readlinkSync: vi.fn((path) => {
+			return vol.readlinkSync(path)
 		}),
 	}
 }
