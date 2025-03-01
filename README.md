@@ -1,8 +1,3 @@
-## What is it?
-
-This API manages deployments and releases of web games.
-
-
 ## API Overview
 
 This API provides endpoints for managing game deployments and releases:
