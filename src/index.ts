@@ -45,7 +45,7 @@ type DeployInfo = BuildInfo & {
 	deployedAt: string
 }
 
-type ReleaseInfo = {
+export type ReleaseInfo = {
 	key: BuildKey
 	index: string
 	files: string
@@ -535,7 +535,7 @@ app.get('/publish/:game/:platform/:buildKey?', async (c) => {
 	fse.outputJsonSync(releasesJsonPath, releases, { spaces: '\t' })
 
 	// @ts-expect-error
-	let removedReleases = await removeOldReleases(releasesJsonPath)
+	let removedReleases = await removeOldReleases(releasesJsonPath, { buildsNumToKeep: 5 })
 
 	updateIndexHtmlSymlink(destDir, newRelease.key)
 
@@ -675,10 +675,18 @@ function removeOldDeployments(envDir: string, options: { buildsNumToKeep: number
 	return removedPaths
 }
 
-async function removeOldReleases(releasesJsonPath: string, buildsNumToKeep = 5) {
+/**
+ * @returns object with removedBuilds array that contains removed build keys
+ */
+async function removeOldReleases(releasesJsonPath: string, options: { buildsNumToKeep: number }) {
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
-	let builds = releases.builds
-	let buildsToKeep = builds.slice(-buildsNumToKeep)
+	
+	// sort builds by date from newest to oldest
+	let builds = releases.builds.sort((a, b) => fromReadableDateString(b.releasedAt) - fromReadableDateString(a.releasedAt))
+
+	// keep only the newest N builds
+	let buildsToKeep = builds.slice(0, options.buildsNumToKeep)
+
 	let buildsToRemove = without(builds, ...buildsToKeep)
 
 	if (buildsToRemove.length === 0) {
