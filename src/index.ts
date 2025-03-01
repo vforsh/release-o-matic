@@ -173,8 +173,18 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	const deployedBuildDir = path.join(envDir, deployedBuildVersion.toString())
 
-	if (!fse.existsSync(deployedBuildDir)) {
+	if (!fse.existsSync(deployedBuildDir)) {	
 		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
+	}
+
+	// ensure that the build_info.json is present
+	if (!fse.existsSync(path.join(deployedBuildDir, 'build_info.json'))) {
+		return c.json({ message: `build '${deployedBuildVersion}' doesn't have build_info.json` }, 404)
+	}
+
+	// ensure that the index.html is present
+	if (!fse.existsSync(path.join(deployedBuildDir, 'index.html'))) {
+		return c.json({ message: `build '${deployedBuildVersion}' doesn't have index.html` }, 404)
 	}
 
 	const buildInfoPath = path.join(deployedBuildDir, 'build_info.json')
@@ -497,6 +507,16 @@ app.get('/publish/:game/:platform/:buildKey?', async (c) => {
 
 	if (!fse.existsSync(srcDir)) {
 		return c.json({ message: `build '${buildKey}' doesn't exist` }, 404)
+	}
+
+	// ensure that the build_info.json is present
+	if (!fse.existsSync(path.join(srcDir, 'build_info.json'))) {
+		return c.json({ message: `build '${buildKey}' doesn't have build_info.json` }, 404)
+	}
+
+	// ensure that the index.html is present
+	if (!fse.existsSync(path.join(srcDir, 'index.html'))) {
+		return c.json({ message: `build '${buildKey}' doesn't have index.html` }, 404)
 	}
 
 	let destDir = path.join(gameDir, `prod/${platform}`)
