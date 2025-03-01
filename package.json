@@ -1,9 +1,12 @@
 {
 	"name": "release-o-matic",
+	"type": "module",
 	"scripts": {
 		"start": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
-		"deploy": "pm2 deploy production"
+		"deploy": "pm2 deploy production",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@t3-oss/env-core": "^0.11.1",
@@ -22,7 +25,9 @@
 	"devDependencies": {
 		"@tsconfig/bun": "^1.0.7",
 		"@types/bun": "latest",
-		"typescript": "^5.7.3"
+		"memfs": "^4.17.0",
+		"typescript": "^5.7.3",
+		"vitest": "^1.4.0"
 	},
 	"engines": {
 		"bun": "1.2.2"
