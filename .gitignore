@@ -12,7 +12,7 @@ node_modules/
 
 # dotenv environment variable files
 .env
-.env.dev
-.env.prod
+.env.*
+!.env.template
 
 test/

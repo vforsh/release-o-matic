@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Node/Bun modules
+node_modules
+bun.lockb
+
+# Build artifacts
+dist
+build
+*.log
+
+# Development and environment files
+.env
+.env.*
+!.env.example
+!.env.template
+.vscode
+.idea
+*.swp
+*.swo
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose*
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+tests
+coverage
+.nyc_output
+
+# Documentation
+README.md
+LICENSE
+docs
+
+# OS specific
+.DS_Store
+Thumbs.db 

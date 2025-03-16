@@ -3,7 +3,9 @@
 	"scripts": {
 		"start": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
-		"deploy": "pm2 deploy production",
+		"deploy": "git push dokku master",
+		"deploy-env": "bun dokku-env-set.ts release-o-matic",
+		"deploy-env:no-restart": "bun dokku-env-set.ts --no-restart release-o-matic",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
@@ -15,18 +17,20 @@
 		"globby": "^14.0.2",
 		"hono": "^4.6.10",
 		"lodash-es": "^4.17.21",
-		"pm2": "^5.4.3",
-		"prettier": "^3.3.3",
-		"prettier-plugin-organize-imports": "^4.1.0",
 		"type-fest": "^4.27.0",
 		"zod": "^3.23.8"
 	},
 	"devDependencies": {
 		"@tsconfig/bun": "^1.0.7",
 		"@types/bun": "latest",
+		"@types/prompts": "^2.4.9",
 		"memfs": "^4.17.0",
+		"prettier": "^3.3.3",
+		"prettier-plugin-organize-imports": "^4.1.0",
+		"prompts": "^2.4.2",
 		"typescript": "^5.7.3",
-		"vitest": "^1.4.0"
+		"vitest": "^1.4.0",
+		"zx": "^8.4.1"
 	},
 	"engines": {
 		"bun": "1.2.2"
