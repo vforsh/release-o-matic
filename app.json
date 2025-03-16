@@ -1,0 +1,15 @@
+{
+  "name": "release-o-matic",
+  "healthchecks": {
+    "web": [
+      {
+        "type": "http",
+        "path": "/health",
+        "port": 4000,
+        "attempts": 3,
+        "timeout": 5,
+        "initial_delay": 5
+      }
+    ]
+  }
+}

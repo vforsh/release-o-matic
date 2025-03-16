@@ -62,7 +62,16 @@ type Releases = {
 
 const app = new Hono()
 
-// Add logger and auth middleware
+// Add health endpoint
+app.get('/health', (c) => {
+	return c.json({
+		status: 'ok',
+		timestamp: Date.now(),
+		uptime: process.uptime()
+	})
+})
+
+// Add logger middleware to all routes
 app.use(
 	logger((str, ...rest) => {
 		const time = toReadableDateString(Date.now(), 'ms')
@@ -71,8 +80,13 @@ app.use(
 	}),
 )
 
-// Add auth middleware
+// Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
+	// Skip auth for health endpoint
+	if (c.req.path === '/health') {
+		return await next()
+	}
+
 	if (!ENV.AUTH_REQUIRED) {
 		return await next()
 	}
@@ -150,7 +164,7 @@ app.get('/preDeploy/:game/:env/:version', (c) => {
 
 	return c.json({
 		newBuildVersion: build,
-		newBuildDir: buildDir,
+		newBuildDir: buildDir.replace(ENV.GAME_BUILDS_DIR, ENV.GAME_BUILDS_DIR_HOST),
 		builds: existingBuilds,
 	})
 })
@@ -200,11 +214,11 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	let symlinkPath = path.join(envDir, 'latest')
 	fse.rmSync(symlinkPath, { force: true })
-	fse.symlinkSync(deployedBuildDir, symlinkPath)
+	fse.symlinkSync(path.relative(envDir, deployedBuildDir), symlinkPath)
 
 	const time = toReadableDateString(Date.now(), 'ms')
 	console.log(
-		`[${time}] Created symlink: ${path.relative(ENV.WEB_SERVER_DIR, symlinkPath)} -> ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)}`,
+		`[${time}] Created symlink: ${path.relative(ENV.GAME_BUILDS_DIR, symlinkPath)} -> ${path.relative(ENV.GAME_BUILDS_DIR, deployedBuildDir)}`,
 	)
 
 	// Update modified date for deployed build dir
@@ -212,11 +226,11 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 	try {
 		fse.utimesSync(deployedBuildDir, currentTime, currentTime)
 		console.log(
-			`[${time}] Updated modified date for ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)} to ${toReadableDateString(currentTime.getTime())}`,
+			`[${time}] Updated modified date for ${path.relative(ENV.GAME_BUILDS_DIR, deployedBuildDir)} to ${toReadableDateString(currentTime.getTime())}`,
 		)
 	} catch (error) {
 		console.error(
-			`[${time}] Failed to update modified date for ${path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir)}:`,
+			`[${time}] Failed to update modified date for ${path.relative(ENV.GAME_BUILDS_DIR, deployedBuildDir)}:`,
 			error,
 		)
 	}
@@ -226,8 +240,8 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	return c.json({
 		buildVersion: deployedBuildVersion,
-		buildDir: path.relative(ENV.WEB_SERVER_DIR, deployedBuildDir),
-		buildDirAlias: path.relative(ENV.WEB_SERVER_DIR, symlinkPath),
+		buildDir: path.relative(ENV.GAME_BUILDS_DIR, deployedBuildDir),
+		buildDirAlias: path.relative(ENV.GAME_BUILDS_DIR, symlinkPath),
 	})
 })
 
@@ -731,7 +745,7 @@ async function removeOldReleases(releasesJsonPath: string, options: { buildsNumT
 }
 
 function updateIndexHtmlSymlink(dir: string, buildKey: string): void {
-	let target = path.join(dir, `index_${buildKey}.html`)
+	let target = `./index_${buildKey}.html`
 	let filepath = path.join(dir, 'index.html')
 
 	// remove existing symlink (if present)
