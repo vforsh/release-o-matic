@@ -7,15 +7,14 @@ $.verbose = false
 
 // Required Configuration
 const DOKKU_USER = 'dokku'
-const DOKKU_HOST = 'robowhale.ru'
+const DOKKU_HOST = 'example.com'
 const APP_NAME = 'release-o-matic'
-const DOMAINS = ['release-o-matic.robowhale.ru']
+const DOMAINS = ['release-o-matic.example.com']
 const GIT_REMOTE_NAME = 'dokku'
 
 // Storage Configuration
 // Format: "host_dir:container_dir"
-// const STORAGE_MOUNTS = ['/var/www/html:/app/data']
-const STORAGE_MOUNTS = [] as string[]
+const STORAGE_MOUNTS = ['/var/www/html:/app/data']
 
 /**
  * Log a message with color
@@ -44,11 +43,11 @@ async function dokkuCmd(command: string) {
  * Check if Dokku is installed on the target server
  */
 async function checkDokkuInstalled() {
-	log.info('Checking if Dokku is installed on the target server...')
+	log.info(`Checking if Dokku is installed on ${DOKKU_HOST}...`)
 
 	try {
 		const version = await dokkuCmd('version')
-		log.success(`Dokku is installed. Version: ${version}`)
+		log.success(`Dokku version ${version} is installed.`)
 		return true
 	} catch (error) {
 		log.error('Dokku is not installed on the target server or SSH connection failed.')
@@ -210,8 +209,8 @@ async function getCurrentGitBranch(defaultBranch = 'master') {
  * Main function to run the script
  */
 async function main() {
-	console.log(chalk.bold.blue('🚀 Dokku Application Setup'))
-	console.log(chalk.gray('=============================================='))
+	console.log('🚀 Dokku Application Setup')
+	console.log('==============================================')
 
 	try {
 		// Check if Dokku is installed
@@ -235,9 +234,10 @@ async function main() {
 		// Get current branch for deployment instructions
 		const currentBranch = await getCurrentGitBranch()
 
-		console.log(chalk.gray('=============================================='))
-		console.log(chalk.bold.blue('✅ Dokku Application Setup - Completed'))
-		console.log(`\nℹ️  Deploy your app with '${chalk.bold.green(`git push ${GIT_REMOTE_NAME} ${currentBranch}`)}'`)
+		console.log('==============================================')
+		console.log('✅ Dokku Application Setup - Completed')
+		console.log()
+		console.log(`ℹ️  Deploy your app with '${chalk.bold.green(`git push ${GIT_REMOTE_NAME} ${currentBranch}`)}'`)
 	} catch (error) {
 		if (error instanceof Error) {
 			log.error(`Setup failed: ${error.message}`)
