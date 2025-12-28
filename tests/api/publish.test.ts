@@ -253,7 +253,8 @@ describe('/publish endpoints', () => {
 
 			// Verify symlink points to latest build
 			const symlinkTarget = await fse.readlink(path.join(prodDir, 'index.html'))
-			expect(symlinkTarget).toBe(path.join(prodDir, `index_${BUILD_KEY_2}.html`))
+			const resolvedSymlinkTarget = path.resolve(prodDir, symlinkTarget)
+			expect(resolvedSymlinkTarget).toBe(path.join(prodDir, `index_${BUILD_KEY_2}.html`))
 		})
 	})
 })
