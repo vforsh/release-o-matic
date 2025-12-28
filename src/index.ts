@@ -89,6 +89,31 @@ app.use(
 // Serve OpenAPI schema
 app.get('/openapi.json', (c) => c.json(openApiDocument))
 
+// Human-friendly API docs powered by Redoc
+app.get('/docs', (c) =>
+        c.html(`<!doctype html>
+<html lang="en">
+        <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Release-o-matic API docs</title>
+                <style>
+                        body {
+                                margin: 0;
+                        }
+                        redoc {
+                                background: #0f172a;
+                                color: #e2e8f0;
+                        }
+                </style>
+        </head>
+        <body>
+                <redoc spec-url="/openapi.json" />
+                <script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script>
+        </body>
+</html>`),
+)
+
 // Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
 	// Skip auth for health endpoint
