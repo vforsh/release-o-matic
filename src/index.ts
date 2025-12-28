@@ -60,7 +60,615 @@ type Releases = {
 	builds: ReleaseInfo[]
 }
 
+const openApiSpec = {
+	openapi: '3.0.3',
+	info: {
+		title: 'Release-o-matic API',
+		version: '1.0.0',
+		description: 'API for managing game build deployments and releases.',
+	},
+	servers: [
+		{
+			url: '/',
+			description: 'Default server',
+		},
+	],
+	components: {
+		securitySchemes: {
+			bearerAuth: {
+				type: 'http',
+				scheme: 'bearer',
+			},
+		},
+		schemas: {
+			BuildInfo: {
+				type: 'object',
+				required: ['version', 'builtAt', 'builtAtReadable', 'gitCommitHash', 'gitBranch'],
+				properties: {
+					version: { type: 'integer', description: 'Build version number.' },
+					builtAt: { type: 'integer', description: 'Build timestamp.' },
+					builtAtReadable: { type: 'string', description: 'Human readable build timestamp.' },
+					gitCommitHash: { type: 'string', description: 'Git commit hash used for the build.' },
+					gitBranch: { type: 'string', description: 'Git branch used for the build.' },
+				},
+			},
+			DeploymentSummary: {
+				type: 'object',
+				required: ['version', 'gitBranch', 'gitCommitHash', 'builtAt', 'deployedAt'],
+				properties: {
+					version: { type: 'integer', description: 'Deployed build version.' },
+					gitBranch: { type: 'string' },
+					gitCommitHash: { type: 'string' },
+					builtAt: { type: 'integer', description: 'Build timestamp.' },
+					deployedAt: { type: 'string', description: 'Readable deployment timestamp.' },
+				},
+			},
+			DeploymentDetail: {
+				type: 'object',
+				required: ['version', 'gitBranch', 'gitCommitHash', 'builtAt', 'builtAtReadable', 'deployedAt'],
+				properties: {
+					version: { type: 'integer' },
+					gitBranch: { type: 'string' },
+					gitCommitHash: { type: 'string' },
+					builtAt: { type: 'integer' },
+					builtAtReadable: { type: 'string' },
+					deployedAt: { type: 'string' },
+					isCurrent: {
+						type: 'boolean',
+						description: 'Indicates whether this deployment is the current one.',
+					},
+				},
+			},
+			ReleaseInfo: {
+				type: 'object',
+				required: ['key', 'index', 'files', 'releasedAt', 'builtAt', 'gitBranch', 'gitCommit'],
+				properties: {
+					key: { type: 'string', description: 'Composite build key (env-version).' },
+					index: { type: 'string', description: 'Index html filename for the release.' },
+					files: { type: 'string', description: 'Manifest filename for the release files.' },
+					releasedAt: { type: 'string', description: 'Readable release timestamp.' },
+					builtAt: { type: 'string', description: 'Readable build timestamp.' },
+					gitBranch: { type: 'string' },
+					gitCommit: { type: 'string' },
+				},
+			},
+			ReleasesOverview: {
+				type: 'object',
+				required: ['current', 'builds'],
+				properties: {
+					current: { type: ['string', 'null'], description: 'Current release build key.' },
+					builds: {
+						type: 'array',
+						items: { $ref: '#/components/schemas/ReleaseInfo' },
+					},
+				},
+			},
+			ReleaseDetail: {
+				type: 'object',
+				required: [
+					'key',
+					'index',
+					'files',
+					'releasedAt',
+					'builtAt',
+					'gitBranch',
+					'gitCommit',
+					'isCurrent',
+					'filesList',
+				],
+				properties: {
+					key: { type: 'string' },
+					index: { type: 'string' },
+					files: { type: 'string' },
+					releasedAt: { type: 'string' },
+					builtAt: { type: 'string' },
+					gitBranch: { type: 'string' },
+					gitCommit: { type: 'string' },
+					isCurrent: { type: 'boolean' },
+					filesList: {
+						type: 'array',
+						items: { type: 'string' },
+						description: 'List of files included in the release.',
+					},
+				},
+			},
+			ErrorResponse: {
+				type: 'object',
+				required: ['message'],
+				properties: {
+					message: { type: 'string' },
+				},
+			},
+			HealthResponse: {
+				type: 'object',
+				required: ['status', 'timestamp', 'uptime'],
+				properties: {
+					status: { type: 'string', example: 'ok' },
+					buildVersion: { type: ['string', 'null'] },
+					deployedAt: { type: ['string', 'null'] },
+					timestamp: { type: 'number' },
+					uptime: { type: 'number' },
+				},
+			},
+			PreDeployResponse: {
+				type: 'object',
+				required: ['newBuildVersion', 'newBuildDir', 'builds'],
+				properties: {
+					newBuildVersion: { type: 'integer' },
+					newBuildDir: { type: 'string', description: 'Host path where the new build should be placed.' },
+					builds: {
+						type: 'array',
+						items: { type: 'integer' },
+						description: 'Existing build versions for the environment.',
+					},
+				},
+			},
+			PostDeployResponse: {
+				type: 'object',
+				required: ['buildVersion', 'buildDir', 'buildDirAlias'],
+				properties: {
+					buildVersion: { type: 'string' },
+					buildDir: { type: 'string', description: 'Relative path to the deployed build directory.' },
+					buildDirAlias: {
+						type: 'string',
+						description: 'Relative path to the alias (symlink) for the deployment.',
+					},
+				},
+			},
+			PublishResponse: {
+				type: 'object',
+				required: ['path', 'release'],
+				properties: {
+					path: { type: 'string', description: 'Filesystem path where the release assets were placed.' },
+					release: { $ref: '#/components/schemas/ReleaseInfo' },
+				},
+			},
+			RollbackResponse: {
+				type: 'object',
+				required: ['path', 'release'],
+				properties: {
+					path: { type: 'string', description: 'Relative path to the release directory.' },
+					release: { $ref: '#/components/schemas/ReleaseInfo' },
+				},
+			},
+		},
+	},
+	paths: {
+		'/health': {
+			get: {
+				summary: 'Health check',
+				description: 'Returns service health status and metadata.',
+				responses: {
+					200: {
+						description: 'Service is healthy.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/HealthResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/': {
+			get: {
+				summary: 'Get builds root path',
+				description: 'Returns the configured root directory for game builds.',
+				security: [{ bearerAuth: [] }],
+				responses: {
+					200: {
+						description: 'Root path returned as plain text.',
+						content: {
+							'text/plain': {
+								schema: { type: 'string' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/env': {
+			get: {
+				summary: 'Get environment configuration',
+				description: 'Returns the effective runtime environment configuration.',
+				security: [{ bearerAuth: [] }],
+				responses: {
+					200: {
+						description: 'Environment variables as configured for the service.',
+						content: {
+							'application/json': {
+								schema: { type: 'object' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/preDeploy/{game}/{env}/{version}': {
+			get: {
+				summary: 'Prepare deployment',
+				description: 'Prepares a new build directory for deployment into a specific environment.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{
+						name: 'game',
+						in: 'path',
+						required: true,
+						schema: { type: 'string' },
+						description: 'Game identifier.',
+					},
+					{
+						name: 'env',
+						in: 'path',
+						required: true,
+						schema: { type: 'string' },
+						description: 'Environment name.',
+					},
+					{
+						name: 'version',
+						in: 'path',
+						required: true,
+						schema: { type: 'integer' },
+						description: 'Build version.',
+					},
+				],
+				responses: {
+					200: {
+						description: 'Build directory prepared.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/PreDeployResponse' },
+							},
+						},
+					},
+					400: {
+						description: 'Invalid request.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/postDeploy/{game}/{env}/{version}': {
+			get: {
+				summary: 'Finalize deployment',
+				description: 'Updates symlinks and cleans old deployments after a successful build deploy.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'env', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'version', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Deployment finalized.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/PostDeployResponse' },
+							},
+						},
+					},
+					400: {
+						description: 'Invalid request.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+					404: {
+						description: 'Build not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/deployments/{game}/{env}': {
+			get: {
+				summary: 'List deployments',
+				description: 'Returns deployment history for a specific environment.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'env', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'List of deployments.',
+						content: {
+							'application/json': {
+								schema: {
+									type: 'array',
+									items: { $ref: '#/components/schemas/DeploymentSummary' },
+								},
+							},
+						},
+					},
+					404: {
+						description: 'Environment not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/deployments/{game}/{env}/current': {
+			get: {
+				summary: 'Get current deployment',
+				description: 'Returns details for the current deployment in the environment.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'env', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Current deployment details.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/DeploymentDetail' },
+							},
+						},
+					},
+					404: {
+						description: 'No current deployment or environment missing.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+					500: {
+						description: 'Unexpected error.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/deployments/{game}/{env}/{version}': {
+			get: {
+				summary: 'Get deployment details',
+				description: 'Returns details about a specific deployed build.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'env', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'version', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Deployment details.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/DeploymentDetail' },
+							},
+						},
+					},
+					404: {
+						description: 'Deployment not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+					500: {
+						description: 'Unexpected error.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/releases/{game}/{platform}': {
+			get: {
+				summary: 'List releases',
+				description: 'Returns releases published for a game and platform.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'platform', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Releases overview.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ReleasesOverview' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/releases/{game}/{platform}/current': {
+			get: {
+				summary: 'Get current release',
+				description: 'Returns details of the current release for the platform.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'platform', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Current release info.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ReleaseInfo' },
+							},
+						},
+					},
+					404: {
+						description: 'Current release not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/releases/{game}/{platform}/{buildKey}': {
+			get: {
+				summary: 'Get release details',
+				description: 'Returns metadata and file listing for a release.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'platform', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'buildKey', in: 'path', required: true, schema: { type: 'string' } },
+				],
+				responses: {
+					200: {
+						description: 'Release details.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ReleaseDetail' },
+							},
+						},
+					},
+					404: {
+						description: 'Release not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/publish/{game}/{platform}/{buildKey}': {
+			get: {
+				summary: 'Publish a build',
+				description:
+					'Publishes a build to the given platform. If buildKey is omitted the latest build is used.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'platform', in: 'path', required: true, schema: { type: 'string' } },
+					{
+						name: 'buildKey',
+						in: 'path',
+						required: false,
+						schema: { type: 'string' },
+						description: 'Build key (env-version). Defaults to the latest build from master/main.',
+					},
+				],
+				responses: {
+					200: {
+						description: 'Build published.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/PublishResponse' },
+							},
+						},
+					},
+					400: {
+						description: 'Invalid request.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+					404: {
+						description: 'Build not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/rollback/{game}/{platform}/{buildKey}': {
+			get: {
+				summary: 'Rollback to a previous release',
+				description:
+					'Switches the current release to the provided build key or the previous release when omitted.',
+				security: [{ bearerAuth: [] }],
+				parameters: [
+					{ name: 'game', in: 'path', required: true, schema: { type: 'string' } },
+					{ name: 'platform', in: 'path', required: true, schema: { type: 'string' } },
+					{
+						name: 'buildKey',
+						in: 'path',
+						required: false,
+						schema: { type: 'string' },
+						description: 'Build key to rollback to. Defaults to the previously published build.',
+					},
+				],
+				responses: {
+					200: {
+						description: 'Rollback successful.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/RollbackResponse' },
+							},
+						},
+					},
+					400: {
+						description: 'Invalid request.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+					404: {
+						description: 'Release not found.',
+						content: {
+							'application/json': {
+								schema: { $ref: '#/components/schemas/ErrorResponse' },
+							},
+						},
+					},
+				},
+			},
+		},
+		'/openapi.json': {
+			get: {
+				summary: 'OpenAPI specification',
+				description: 'Returns the OpenAPI 3.0 document describing all API endpoints.',
+				responses: {
+					200: {
+						description: 'OpenAPI specification.',
+						content: {
+							'application/json': {
+								schema: { type: 'object' },
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}
+
 const app = new Hono()
+
+app.get('/openapi.json', (c) => c.json(openApiSpec))
 
 // Add health endpoint
 app.get('/health', (c) => {
@@ -88,7 +696,7 @@ app.use(
 // Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
 	// Skip auth for health endpoint
-	if (c.req.path === '/health') {
+	if (c.req.path === '/health' || c.req.path === '/openapi.json') {
 		return await next()
 	}
 
@@ -192,7 +800,7 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	const deployedBuildDir = path.join(envDir, deployedBuildVersion.toString())
 
-	if (!fse.existsSync(deployedBuildDir)) {	
+	if (!fse.existsSync(deployedBuildDir)) {
 		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
 	}
 
@@ -719,9 +1327,11 @@ function removeOldDeployments(envDir: string, options: { buildsNumToKeep: number
  */
 async function removeOldReleases(releasesJsonPath: string, options: { buildsNumToKeep: number }) {
 	let releases = fse.readJsonSync(releasesJsonPath) as Releases
-	
+
 	// sort builds by date from newest to oldest
-	let builds = releases.builds.sort((a, b) => fromReadableDateString(b.releasedAt) - fromReadableDateString(a.releasedAt))
+	let builds = releases.builds.sort(
+		(a, b) => fromReadableDateString(b.releasedAt) - fromReadableDateString(a.releasedAt),
+	)
 
 	// keep only the newest N builds
 	let buildsToKeep = builds.slice(0, options.buildsNumToKeep)
