@@ -64,8 +64,8 @@ const app = new Hono()
 
 // Add health endpoint
 app.get('/health', (c) => {
-	const buildVersion = process.env.BUILD_VERSION ?? null
-	const deployedAt = process.env.DEPLOYED_AT ?? null
+	const buildVersion = ENV.BUILD_VERSION ?? null
+	const deployedAt = ENV.DEPLOYED_AT ?? null
 
 	return c.json({
 		status: 'ok',

@@ -13,6 +13,8 @@ export const env = createEnv({
 		BEARER_TOKEN: z.string().min(1),
 		GAME_BUILDS_DIR: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
 		GAME_BUILDS_DIR_HOST: z.string().refine((value) => path.isAbsolute(value), 'must be an absolute path'),
+		BUILD_VERSION: z.string().optional(),
+		DEPLOYED_AT: z.string().optional(),
 		AUTH_REQUIRED: z
 			.enum(['true', 'false'])
 			.default('true')

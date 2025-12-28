@@ -12,6 +12,7 @@
 import { execSync, spawn } from 'child_process'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
 import prompts from 'prompts'
+import { parseArgs } from 'util'
 
 interface Args {
 	remote: string
@@ -21,29 +22,28 @@ interface Args {
 	noMeta: boolean
 }
 
-function parseArgs(): Args {
-	const args = process.argv.slice(2)
-	let remote = 'dokku'
-	let refspec = 'master:dokku'
-	let appName = ''
-	let sshHost = ''
-	let noMeta = false
+function parseCommandLineArgs(): Args {
+	const { values, positionals } = parseArgs({
+		args: Bun.argv,
+		options: {
+			'remote': { type: 'string' },
+			'refspec': { type: 'string' },
+			'ssh-host': { type: 'string' },
+			'no-meta': { type: 'boolean' },
+		},
+		strict: true,
+		allowPositionals: true,
+	})
 
-	for (const arg of args) {
-		if (arg.startsWith('--remote=')) {
-			remote = arg.substring('--remote='.length)
-		} else if (arg.startsWith('--refspec=')) {
-			refspec = arg.substring('--refspec='.length)
-		} else if (arg.startsWith('--ssh-host=')) {
-			sshHost = arg.substring('--ssh-host='.length)
-		} else if (arg === '--no-meta') {
-			noMeta = true
-		} else if (!arg.startsWith('--')) {
-			appName = arg
-		}
+	const appName = positionals[2] ?? ''
+
+	return {
+		remote: values.remote ?? 'dokku',
+		refspec: values.refspec ?? 'master:dokku',
+		appName,
+		sshHost: values['ssh-host'] ?? '',
+		noMeta: values['no-meta'] ?? false,
 	}
-
-	return { remote, refspec, appName, sshHost, noMeta }
 }
 
 function parseEnvFile(content: string): Record<string, string> {
@@ -90,7 +90,7 @@ function loadDeploySettings(): { appName: string; sshHost: string } {
 			sshHost: settings.SSH_HOST || '',
 		}
 	} catch (error) {
-		console.warn('Warning: Could not read .env.deploy file', error.message)
+		console.warn('Warning: Could not read .env.deploy file', error instanceof Error ? error.message : String(error))
 		return { appName: '', sshHost: '' }
 	}
 }
@@ -126,7 +126,7 @@ async function runCommand(command: string, args: string[]): Promise<void> {
 
 async function main() {
 	try {
-		let { remote, refspec, appName, sshHost, noMeta } = parseArgs()
+		let { remote, refspec, appName, sshHost, noMeta } = parseCommandLineArgs()
 
 		if (!appName || !sshHost) {
 			const savedSettings = loadDeploySettings()
@@ -180,7 +180,7 @@ async function main() {
 
 		saveDeploySettings(appName, sshHost)
 	} catch (error) {
-		console.error('Error:', error.message)
+		console.error('Error:', error instanceof Error ? error.message : String(error))
 		process.exit(1)
 	}
 }
