@@ -6,6 +6,7 @@ import { without } from 'lodash-es'
 import path from 'path'
 import { z } from 'zod'
 import { env as ENV } from './env'
+import { openApiDocument } from './openapi'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
 import { getErrorLog } from './utils/error/utils'
 
@@ -78,12 +79,15 @@ app.get('/health', (c) => {
 
 // Add logger middleware to all routes
 app.use(
-	logger((str, ...rest) => {
-		const time = toReadableDateString(Date.now(), 'ms')
-		console.log(`[${time}]`, str, ...rest)
-		return str
-	}),
+        logger((str, ...rest) => {
+                const time = toReadableDateString(Date.now(), 'ms')
+                console.log(`[${time}]`, str, ...rest)
+                return str
+        }),
 )
+
+// Serve OpenAPI schema
+app.get('/openapi.json', (c) => c.json(openApiDocument))
 
 // Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
