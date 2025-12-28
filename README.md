@@ -106,28 +106,38 @@ The deployment workflow consists of three main phases:
 - Authentication requires a Bearer token when enabled
 
 
-## API Deployment
+## Service Deployment (Dokku)
 
-This section describes how to deploy the API service itself.
+This repo is deployed to a Dokku remote. Deploys are git pushes that trigger a Docker build on the server.
 
-Deployment is done with [PM2](https://pm2.keymetrics.io/docs/usage/deployment/).
+### How to deploy
+1. Make sure the `dokku` remote exists and points to the server:
+   ```sh
+   git remote -v
+   ```
+2. Deploy using the helper script (sets build metadata and pushes):
+   ```sh
+   bun run deploy
+   ```
+   This sets:
+   - `BUILD_VERSION` to the current git commit short hash
+   - `DEPLOYED_AT` to an ISO timestamp
 
-You will need to install Bun and PM2 on the host machine. Refer to `package.json` for the Bun version used in the project.
+   You can override these with env vars:
+   ```sh
+   BUILD_VERSION=custom DEPLOYED_AT=2025-12-28T20:00:00Z bun run deploy
+   ```
 
-Also, you will need to add SSH keys to host machine so it will be able to clone git repo with the project.
-
-After that, you must run the following command to prepare the deployment:
-```sh
-pm2 deploy ecosystem.config.js production setup
-```
-
-Then you can deploy the app with the following command:
-```sh
-pm2 deploy ecosystem.config.js production
-```
+### How deploys work
+- Dokku builds the app using the `Dockerfile`.
+- The Docker image is based on `oven/bun:1.3.5`.
+- Dependencies are installed via `bun install --frozen-lockfile` using `bun.lock`.
+- The container starts with `bun run start` (see `package.json`), which currently runs the server in hot mode.
+- Healthchecks verify the app is listening on the configured port before routing traffic.
+- The `/health` endpoint returns `buildVersion` and `deployedAt` when set.
 
 
-## Server Setup
+## Server Setup (Reverse Proxy)
 
 You will need to set up a reverse proxy with your server software to forward requests to the port where the app is running.
 

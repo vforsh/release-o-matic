@@ -1,9 +1,10 @@
 {
 	"name": "release-o-matic",
 	"scripts": {
-		"start": "bun run --hot src/index.ts",
+		"start": "bun run src/index.ts",
+		"start:dev": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
-		"deploy": "git push dokku master",
+		"deploy": "bun dokku-deploy.ts release-o-matic",
 		"deploy-env": "bun dokku-env-set.ts release-o-matic",
 		"deploy-env:no-restart": "bun dokku-env-set.ts --no-restart release-o-matic",
 		"test": "vitest run",

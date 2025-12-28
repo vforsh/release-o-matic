@@ -4,7 +4,7 @@
 		{
 			"label": "serve:dev",
 			"type": "npm",
-			"script": "start",
+			"script": "start:dev",
 			"group": "build",
 			"presentation": {
 				"reveal": "always",
