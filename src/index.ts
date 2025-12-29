@@ -33,8 +33,8 @@ function parseBuildKey(key: BuildKey): { env: string; version: number } {
 }
 
 const buildInfoSchema = z.object({
-	version: z.number().describe('build version'),
-	builtAt: z.number().describe('build timestamp'),
+        version: z.number().describe('build version'),
+        builtAt: z.number().describe('build timestamp'),
 	builtAtReadable: z.string().describe('build timestamp in readable format'),
 	gitCommitHash: z.string().describe('git commit hash'),
 	gitBranch: z.string().describe('git branch'),
@@ -57,9 +57,44 @@ export type ReleaseInfo = {
 }
 
 type Releases = {
-	current: string | null
-	builds: ReleaseInfo[]
+        current: string | null
+        builds: ReleaseInfo[]
 }
+
+function createRedocHtml(spec: unknown): string {
+        const serializedSpec = JSON.stringify(spec)
+                .replace(/</g, '\\u003c')
+                .replace(/-->/g, '--\\>')
+                .replace(/<\\/script/gi, '<\\/script')
+
+        return `<!doctype html>
+<html lang="en">
+        <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Release-o-matic API docs</title>
+                <style>
+                        body {
+                                margin: 0;
+                        }
+                        #redoc-container {
+                                background: #0f172a;
+                                color: #e2e8f0;
+                        }
+                </style>
+        </head>
+        <body>
+                <div id="redoc-container"></div>
+                <script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script>
+                <script>
+                        const spec = ${serializedSpec};
+                        Redoc.init(spec, {}, document.getElementById('redoc-container'));
+                </script>
+        </body>
+</html>`
+}
+
+const redocHtml = createRedocHtml(openApiDocument)
 
 const app = new Hono()
 
@@ -90,29 +125,7 @@ app.use(
 app.get('/openapi.json', (c) => c.json(openApiDocument))
 
 // Human-friendly API docs powered by Redoc
-app.get('/docs', (c) =>
-        c.html(`<!doctype html>
-<html lang="en">
-        <head>
-                <meta charset="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <title>Release-o-matic API docs</title>
-                <style>
-                        body {
-                                margin: 0;
-                        }
-                        redoc {
-                                background: #0f172a;
-                                color: #e2e8f0;
-                        }
-                </style>
-        </head>
-        <body>
-                <redoc spec-url="/openapi.json" />
-                <script src="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"></script>
-        </body>
-</html>`),
-)
+app.get('/docs', (c) => c.html(redocHtml))
 
 // Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
