@@ -106,9 +106,39 @@ The deployment workflow consists of three main phases:
 - Authentication requires a Bearer token when enabled
 
 
-## Service Deployment (Dokku)
+## Service Deployment
 
 This repo is deployed to a Dokku remote. Deploys are git pushes that trigger a Docker build on the server.
+
+### Prerequisites
+
+- **Dokku is installed and reachable over SSH**: follow Dokku’s [Getting Started / Installation guide](https://dokku.com/docs/getting-started/installation/) and verify you can run `ssh dokku@your-host dokku version`.
+- **Your SSH key is authorized**: your local machine can SSH to the Dokku host as the Dokku user.
+- **Domains + DNS**: any domains you add via `domains:add` should have DNS records pointing at the server (see Dokku docs: [Domain Configuration](https://dokku.com/docs/configuration/domains/)).
+- **Reverse proxy / TLS**: configure your web server (e.g. Caddy/Nginx) to proxy to the app’s port (see “Server Setup (Reverse Proxy)” below).
+
+### Initial Dokku app setup (`scripts/dokku-app-setup.ts`)
+
+This repo includes a one-time bootstrap script to create/configure the Dokku app on a fresh server:
+
+- **Checks Dokku is reachable**: verifies SSH connectivity and that Dokku is installed.
+- **Creates the Dokku app**: `apps:create release-o-matic` (skips if it already exists).
+- **Configures domains**: clears existing domains and adds the configured domains.
+- **Configures storage mounts**: mounts host directories into the container. If `STORAGE_MOUNTS` is set, the script will auto-install `dokku-storage` if needed.
+- **Configures local git remote**: adds a `dokku` remote pointing at `dokku@host:app`.
+
+Before running it, edit the constants at the top of `scripts/dokku-app-setup.ts`:
+
+- **`DOKKU_HOST` / `DOKKU_USER`**: where Dokku is running (and which SSH user to use).
+- **`APP_NAME` / `DOMAINS`**: Dokku app name and domains to attach.
+- **`STORAGE_MOUNTS`**: array of `"host_dir:container_dir"` mounts (example: `"/var/www/html:/app/data"`).
+- **`GIT_REMOTE_NAME`**: local git remote name to create (defaults to `dokku`).
+
+Run the setup script:
+
+```sh
+bun scripts/dokku-app-setup.ts
+```
 
 ### How to deploy
 1. Make sure the `dokku` remote exists and points to the server:

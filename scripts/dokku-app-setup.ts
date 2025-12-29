@@ -125,12 +125,17 @@ async function setupStorage() {
 	log.info(`Setting up storage mounts for ${APP_NAME}`)
 
 	try {
-		// Check if storage plugin is installed
+		// Ensure storage plugin is installed (required when STORAGE_MOUNTS is used)
 		const storageInstalled = await checkPluginInstalled('storage')
 		if (!storageInstalled) {
-			log.error('The dokku-storage plugin is not installed.')
-			log.info('Install it with: dokku plugin:install https://github.com/dokku/dokku-storage.git')
-			throw new Error('Missing required plugin: dokku-storage')
+			log.warning('The dokku-storage plugin is not installed. Installing it now...')
+			await dokkuCmd('plugin:install https://github.com/dokku/dokku-storage.git')
+
+			const storageInstalledAfter = await checkPluginInstalled('storage')
+			if (!storageInstalledAfter) {
+				throw new Error('Failed to install required plugin: dokku-storage')
+			}
+			log.success('dokku-storage plugin installed.')
 		}
 
 		// Set up each storage mount
