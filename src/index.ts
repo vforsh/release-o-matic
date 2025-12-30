@@ -6,6 +6,8 @@ import { without } from 'lodash-es'
 import path from 'path'
 import { z } from 'zod'
 import { env as ENV } from './env'
+import { openApiDocument } from './openapi'
+import { createRedocHtml } from './redoc'
 import { fromReadableDateString, toReadableDateString } from './utils/date/readable-date-string'
 import { getErrorLog } from './utils/error/utils'
 
@@ -32,8 +34,8 @@ function parseBuildKey(key: BuildKey): { env: string; version: number } {
 }
 
 const buildInfoSchema = z.object({
-	version: z.number().describe('build version'),
-	builtAt: z.number().describe('build timestamp'),
+        version: z.number().describe('build version'),
+        builtAt: z.number().describe('build timestamp'),
 	builtAtReadable: z.string().describe('build timestamp in readable format'),
 	gitCommitHash: z.string().describe('git commit hash'),
 	gitBranch: z.string().describe('git branch'),
@@ -56,9 +58,11 @@ export type ReleaseInfo = {
 }
 
 type Releases = {
-	current: string | null
-	builds: ReleaseInfo[]
+        current: string | null
+        builds: ReleaseInfo[]
 }
+
+const redocHtml = createRedocHtml(openApiDocument)
 
 const app = new Hono()
 
@@ -78,12 +82,18 @@ app.get('/health', (c) => {
 
 // Add logger middleware to all routes
 app.use(
-	logger((str, ...rest) => {
-		const time = toReadableDateString(Date.now(), 'ms')
-		console.log(`[${time}]`, str, ...rest)
-		return str
-	}),
+        logger((str, ...rest) => {
+                const time = toReadableDateString(Date.now(), 'ms')
+                console.log(`[${time}]`, str, ...rest)
+                return str
+        }),
 )
+
+// Serve OpenAPI schema
+app.get('/openapi.json', (c) => c.json(openApiDocument))
+
+// Human-friendly API docs powered by Redoc
+app.get('/docs', (c) => c.html(redocHtml))
 
 // Add auth middleware to all routes except /health
 app.use(async function authMiddleware(c: any, next: any) {
