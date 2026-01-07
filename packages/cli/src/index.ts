@@ -2,6 +2,7 @@
 import { cac } from 'cac'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import prompts from 'prompts'
 import {
 	createClient,
@@ -16,7 +17,12 @@ import {
 import { getConfigPath, resolveConfig, type CliFlags } from './config.js'
 import { resolveOutputMode, writeError, writeJson, writeLines, writeText } from './output.js'
 
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json') as { version?: string }
+const cliVersion = pkg.version ?? '0.0.0'
+
 const cli = cac('rmatic')
+cli.version(cliVersion)
 
 cli
 	.option('--base-url <url>', 'Release-o-matic base URL (overrides RMATIC_BASE_URL)')
@@ -380,6 +386,7 @@ cli
 cli
 	.command('help [command]', 'Show help for a command')
 	.action((command) => {
+		writeLines([`rmatic v${cliVersion}`])
 		if (command) {
 			const target = cli.commands.find((cmd) => cmd.name === command)
 			if (target && typeof (target as { outputHelp?: () => void }).outputHelp === 'function') {
