@@ -6,7 +6,11 @@ export {
 	RmaticNetworkError,
 } from './errors.js'
 export type {
+	DeployInfo,
+	DeploymentDetail,
 	HealthResponse,
+	PostDeployResponse,
+	PreDeployResponse,
 	PublishResponse,
 	ReleaseInfo,
 	ReleaseWithFilesResponse,

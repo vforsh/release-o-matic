@@ -1,11 +1,15 @@
 import { RmaticConfigError, RmaticError, RmaticHttpError, RmaticNetworkError } from './errors.js'
 import type {
+	DeployInfo,
 	HealthResponse,
+	PostDeployResponse,
+	PreDeployResponse,
 	PublishResponse,
 	ReleaseInfo,
 	ReleaseWithFilesResponse,
 	ReleasesResponse,
 	RollbackResponse,
+	DeploymentDetail,
 } from './types.js'
 
 export type ClientOptions = {
@@ -31,6 +35,12 @@ export type ReleaseLookup = {
 	game: string
 	platform: string
 	buildKey: string
+}
+
+export type DeployLookup = {
+	game: string
+	env: string
+	version: number | string
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -126,6 +136,41 @@ export function createClient(options: ClientOptions) {
 
 	return {
 		health: () => request<HealthResponse>('GET', '/health'),
+		deploy: {
+			pre: ({ game, env, version }: DeployLookup) =>
+				request<PreDeployResponse>(
+					'GET',
+					`/preDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
+						version.toString(),
+					)}`,
+				),
+			post: ({ game, env, version }: DeployLookup) =>
+				request<PostDeployResponse>(
+					'GET',
+					`/postDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
+						version.toString(),
+					)}`,
+				),
+		},
+		deployments: {
+			list: ({ game, env }: { game: string; env: string }) =>
+				request<DeployInfo[]>(
+					'GET',
+					`/deployments/${encodeURIComponent(game)}/${encodeURIComponent(env)}`,
+				),
+			current: ({ game, env }: { game: string; env: string }) =>
+				request<DeployInfo>(
+					'GET',
+					`/deployments/${encodeURIComponent(game)}/${encodeURIComponent(env)}/current`,
+				),
+			get: ({ game, env, version }: DeployLookup) =>
+				request<DeploymentDetail>(
+					'GET',
+					`/deployments/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
+						version.toString(),
+					)}`,
+				),
+		},
 		publish: ({ game, platform, buildKey }: PublishInput) =>
 			request<PublishResponse>(
 				'GET',

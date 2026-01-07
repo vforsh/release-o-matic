@@ -141,6 +141,9 @@ rmatic --base-url https://… --token $RMATIC_TOKEN health
 rmatic publish papa-cherry-2 vk master-21
 rmatic releases list papa-cherry-2 vk --plain
 rmatic rollback papa-cherry-2 vk --force
+rmatic deploy pre papa-cherry-2 staging 42
+rmatic deploy post papa-cherry-2 staging 42
+rmatic deployments list papa-cherry-2 staging
 ```
 
 

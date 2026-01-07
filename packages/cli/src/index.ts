@@ -7,6 +7,8 @@ import {
 	RmaticError,
 	RmaticHttpError,
 	RmaticNetworkError,
+	type DeployInfo,
+	type DeploymentDetail,
 	type ReleaseInfo,
 } from '@vforsh/rmatic-client'
 import { resolveConfig, type CliFlags } from './config.js'
@@ -51,6 +53,120 @@ cli
 				lines.push(`Deployed: ${data.deployedAt}`)
 			}
 			writeLines(lines)
+		})
+	})
+
+cli
+	.command('deploy pre <game> <env> <version>', 'Prepare a deployment directory')
+	.example('rmatic deploy pre papa-cherry-2 staging 42')
+	.action(async (game, env, version, flags) => {
+		await withClient(flags, async (client, outputMode) => {
+			const data = await client.deploy.pre({ game, env, version })
+			if (outputMode === 'json') {
+				writeJson(data)
+				return
+			}
+			if (outputMode === 'plain') {
+				writeLines([data.newBuildDir])
+				return
+			}
+
+			writeLines([
+				`Prepared build #${data.newBuildVersion} for ${game}/${env}.`,
+				`Directory: ${data.newBuildDir}`,
+			])
+		})
+	})
+
+cli
+	.command('deploy post <game> <env> <version>', 'Finalize a deployment')
+	.example('rmatic deploy post papa-cherry-2 staging 42')
+	.action(async (game, env, version, flags) => {
+		await withClient(flags, async (client, outputMode) => {
+			const data = await client.deploy.post({ game, env, version })
+			if (outputMode === 'json') {
+				writeJson(data)
+				return
+			}
+			if (outputMode === 'plain') {
+				writeLines([data.buildDirAlias])
+				return
+			}
+
+			writeLines([
+				`Deployed build #${data.buildVersion} for ${game}/${env}.`,
+				`Build: ${data.buildDir}`,
+				`Alias: ${data.buildDirAlias}`,
+			])
+		})
+	})
+
+cli
+	.command('deployments list <game> <env>', 'List deployments for an environment')
+	.example('rmatic deployments list papa-cherry-2 staging --plain')
+	.action(async (game, env, flags) => {
+		await withClient(flags, async (client, outputMode) => {
+			const data = await client.deployments.list({ game, env })
+			if (outputMode === 'json') {
+				writeJson(data)
+				return
+			}
+			if (outputMode === 'plain') {
+				writeLines(data.map((item: DeployInfo) => String(item.version)))
+				return
+			}
+
+			const lines = [`Deployments for ${game}/${env}:`]
+			for (const deployment of data) {
+				lines.push(`- #${deployment.version} (${deployment.deployedAt})`)
+			}
+			writeLines(lines)
+		})
+	})
+
+cli
+	.command('deployments current <game> <env>', 'Show current deployment')
+	.action(async (game, env, flags) => {
+		await withClient(flags, async (client, outputMode) => {
+			const data = await client.deployments.current({ game, env })
+			if (outputMode === 'json') {
+				writeJson(data)
+				return
+			}
+			if (outputMode === 'plain') {
+				writeText(String(data.version))
+				return
+			}
+
+			writeLines([
+				`Current deployment: #${data.version}`,
+				`Deployed: ${data.deployedAt}`,
+				`Built: ${data.builtAtReadable ?? data.builtAt}`,
+			])
+		})
+	})
+
+cli
+	.command('deployments get <game> <env> <version>', 'Show deployment details')
+	.action(async (game, env, version, flags) => {
+		await withClient(flags, async (client, outputMode) => {
+			const data = await client.deployments.get({ game, env, version })
+			if (outputMode === 'json') {
+				writeJson(data)
+				return
+			}
+			if (outputMode === 'plain') {
+				writeText(String(data.version))
+				return
+			}
+
+			const details = data as DeploymentDetail
+			writeLines([
+				`Deployment: #${details.version}`,
+				`Current: ${details.isCurrent ? 'yes' : 'no'}`,
+				`Deployed: ${details.deployedAt}`,
+				`Built: ${details.builtAtReadable ?? details.builtAt}`,
+			])
 		})
 	})
 

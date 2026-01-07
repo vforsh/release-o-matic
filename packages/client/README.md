@@ -20,6 +20,7 @@ const client = createClient({
 
 const health = await client.health()
 const releases = await client.releases.list({ game: 'papa-cherry-2', platform: 'vk' })
+const pre = await client.deploy.pre({ game: 'papa-cherry-2', env: 'staging', version: 42 })
 ```
 
 ## Configuration
