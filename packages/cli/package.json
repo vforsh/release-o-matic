@@ -1,16 +1,17 @@
 {
 	"name": "@vforsh/rmatic",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"type": "module",
 	"bin": {
-		"rmatic": "./dist/index.js"
+		"rmatic": "dist/index.js"
 	},
 	"exports": {
 		".": "./dist/index.js"
 	},
 	"files": ["dist"],
 	"scripts": {
-		"build": "tsc -p tsconfig.json"
+		"build": "tsc -b tsconfig.json",
+		"prepublishOnly": "npm run build"
 	},
 	"dependencies": {
 		"@vforsh/rmatic-client": "0.1.0",

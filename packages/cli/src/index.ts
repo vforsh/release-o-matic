@@ -9,8 +9,8 @@ import {
 	RmaticNetworkError,
 	type ReleaseInfo,
 } from '@vforsh/rmatic-client'
-import { resolveConfig, type CliFlags } from './config'
-import { resolveOutputMode, writeError, writeJson, writeLines, writeText } from './output'
+import { resolveConfig, type CliFlags } from './config.js'
+import { resolveOutputMode, writeError, writeJson, writeLines, writeText } from './output.js'
 
 const cli = cac('rmatic')
 
@@ -124,7 +124,7 @@ cli
 				return
 			}
 			if (outputMode === 'plain') {
-				writeLines(data.builds.map((item) => item.key))
+				writeLines(data.builds.map((item: ReleaseInfo) => item.key))
 				return
 			}
 
@@ -316,7 +316,7 @@ async function resolveRollbackTarget(
 	}
 
 	const list = await client.releases.list({ game, platform })
-	const currentIndex = list.builds.findIndex((item) => item.key === list.current)
+	const currentIndex = list.builds.findIndex((item: ReleaseInfo) => item.key === list.current)
 	const previous = currentIndex >= 0 ? list.builds[currentIndex + 1] : undefined
 
 	if (!previous) {

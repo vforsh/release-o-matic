@@ -1,4 +1,4 @@
-import { RmaticConfigError, RmaticError, RmaticHttpError, RmaticNetworkError } from './errors'
+import { RmaticConfigError, RmaticError, RmaticHttpError, RmaticNetworkError } from './errors.js'
 import type {
 	HealthResponse,
 	PublishResponse,
@@ -6,7 +6,7 @@ import type {
 	ReleaseWithFilesResponse,
 	ReleasesResponse,
 	RollbackResponse,
-} from './types'
+} from './types.js'
 
 export type ClientOptions = {
 	baseUrl: string

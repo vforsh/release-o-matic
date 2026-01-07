@@ -1,10 +1,10 @@
-export { createClient } from './client'
+export { createClient } from './client.js'
 export {
 	RmaticConfigError,
 	RmaticError,
 	RmaticHttpError,
 	RmaticNetworkError,
-} from './errors'
+} from './errors.js'
 export type {
 	HealthResponse,
 	PublishResponse,
@@ -12,4 +12,4 @@ export type {
 	ReleaseWithFilesResponse,
 	ReleasesResponse,
 	RollbackResponse,
-} from './types'
+} from './types.js'

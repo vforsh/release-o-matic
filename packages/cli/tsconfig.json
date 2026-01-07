@@ -12,8 +12,8 @@
 		"esModuleInterop": true,
 		"allowSyntheticDefaultImports": true,
 		"noEmitOnError": true,
-		"preserveShebang": true,
 		"skipLibCheck": true
 	},
+	"references": [{ "path": "../client" }],
 	"include": ["src/**/*.ts"]
 }

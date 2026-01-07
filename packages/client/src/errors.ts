@@ -1,10 +1,11 @@
 export class RmaticError extends Error {
+	cause?: unknown
+
 	constructor(message: string, options?: { cause?: unknown }) {
 		super(message)
 		this.name = 'RmaticError'
 		if (options?.cause) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			;(this as any).cause = options.cause
+			this.cause = options.cause
 		}
 	}
 }
