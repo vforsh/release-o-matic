@@ -175,7 +175,7 @@ cli
 	.example('rmatic deploy pre papa-cherry-2 staging 42')
 	.action(async (game, env, version, flags) => {
 		await withClient(flags, async (client, outputMode) => {
-			const data = await client.deploy.pre({ game, env, version })
+			const data = await client.preDeploy({ game, env, version })
 			if (outputMode === 'json') {
 				writeJson(data)
 				return
@@ -197,7 +197,7 @@ cli
 	.example('rmatic deploy post papa-cherry-2 staging 42')
 	.action(async (game, env, version, flags) => {
 		await withClient(flags, async (client, outputMode) => {
-			const data = await client.deploy.post({ game, env, version })
+			const data = await client.postDeploy({ game, env, version })
 			if (outputMode === 'json') {
 				writeJson(data)
 				return

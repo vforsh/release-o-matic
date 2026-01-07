@@ -13,34 +13,142 @@ import type {
 } from './types.js'
 
 export type ClientOptions = {
+	/**
+	 * Base URL for the Release-o-matic API (required).
+	 */
 	baseUrl: string
+	/**
+	 * Optional bearer token for authenticated servers.
+	 */
 	token?: string
+	/**
+	 * Request timeout in milliseconds (default: 30000).
+	 */
 	timeoutMs?: number
+	/**
+	 * Custom fetch implementation (primarily for testing).
+	 */
 	fetch?: typeof fetch
 }
 
 export type PublishInput = {
+	/**
+	 * Game slug.
+	 */
 	game: string
+	/**
+	 * Platform identifier.
+	 */
 	platform: string
+	/**
+	 * Optional build key. If omitted, server selects latest build.
+	 */
 	buildKey?: string
 }
 
 export type RollbackInput = {
+	/**
+	 * Game slug.
+	 */
 	game: string
+	/**
+	 * Platform identifier.
+	 */
 	platform: string
+	/**
+	 * Optional build key. If omitted, server rolls back to previous.
+	 */
 	buildKey?: string
 }
 
 export type ReleaseLookup = {
+	/**
+	 * Game slug.
+	 */
 	game: string
+	/**
+	 * Platform identifier.
+	 */
 	platform: string
+	/**
+	 * Build key to fetch.
+	 */
 	buildKey: string
 }
 
 export type DeployLookup = {
+	/**
+	 * Game slug.
+	 */
 	game: string
+	/**
+	 * Deployment environment.
+	 */
 	env: string
+	/**
+	 * Build version number.
+	 */
 	version: number | string
+}
+
+/**
+ * Typed client interface for the Release-o-matic API.
+ */
+export type RmaticClient = {
+	/**
+	 * Check service health.
+	 */
+	health: () => Promise<HealthResponse>
+	/**
+	 * Prepare a deployment directory.
+	 */
+	preDeploy: (input: DeployLookup) => Promise<PreDeployResponse>
+	/**
+	 * Finalize deployment (post-deploy).
+	 */
+	postDeploy: (input: DeployLookup) => Promise<PostDeployResponse>
+	/**
+	 * Deployment queries.
+	 */
+	deployments: {
+		/**
+		 * List deployments for an environment.
+		 */
+		list: (input: { game: string; env: string }) => Promise<DeployInfo[]>
+		/**
+		 * Get the current deployment for an environment.
+		 */
+		current: (input: { game: string; env: string }) => Promise<DeployInfo>
+		/**
+		 * Get deployment details for a specific version.
+		 */
+		get: (input: DeployLookup) => Promise<DeploymentDetail>
+	}
+	/**
+	 * Publish a build.
+	 */
+	publish: (input: PublishInput) => Promise<PublishResponse>
+	/**
+	 * Roll back to a previous build.
+	 */
+	rollback: (input: RollbackInput) => Promise<RollbackResponse>
+	/**
+	 * Release queries.
+	 */
+	releases: {
+		/**
+		 * List releases for a platform.
+		 */
+		list: (input: { game: string; platform: string }) => Promise<ReleasesResponse>
+		/**
+		 * Get the current release for a platform.
+		 */
+		current: (input: { game: string; platform: string }) => Promise<ReleaseInfo>
+		/**
+		 * Get a specific release by build key.
+		 */
+		get: (input: ReleaseLookup) => Promise<ReleaseWithFilesResponse>
+	}
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -68,7 +176,10 @@ function getErrorMessage(status: number, method: string, url: string, body?: unk
 	return `${method} ${url} failed with status ${status}`
 }
 
-export function createClient(options: ClientOptions) {
+/**
+ * Create a typed client for the Release-o-matic API.
+ */
+export function createClient(options: ClientOptions): RmaticClient {
 	const baseUrl = normalizeBaseUrl(options.baseUrl)
 	const token = options.token
 	const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -136,22 +247,20 @@ export function createClient(options: ClientOptions) {
 
 	return {
 		health: () => request<HealthResponse>('GET', '/health'),
-		deploy: {
-			pre: ({ game, env, version }: DeployLookup) =>
-				request<PreDeployResponse>(
-					'GET',
-					`/preDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
-						version.toString(),
-					)}`,
-				),
-			post: ({ game, env, version }: DeployLookup) =>
-				request<PostDeployResponse>(
-					'GET',
-					`/postDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
-						version.toString(),
-					)}`,
-				),
-		},
+		preDeploy: ({ game, env, version }: DeployLookup) =>
+			request<PreDeployResponse>(
+				'GET',
+				`/preDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
+					version.toString(),
+				)}`,
+			),
+		postDeploy: ({ game, env, version }: DeployLookup) =>
+			request<PostDeployResponse>(
+				'GET',
+				`/postDeploy/${encodeURIComponent(game)}/${encodeURIComponent(env)}/${encodeURIComponent(
+					version.toString(),
+				)}`,
+			),
 		deployments: {
 			list: ({ game, env }: { game: string; env: string }) =>
 				request<DeployInfo[]>(

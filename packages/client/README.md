@@ -13,14 +13,14 @@ npm install @vforsh/rmatic-client
 ```ts
 import { createClient } from '@vforsh/rmatic-client'
 
-const client = createClient({
+const rmatic = createClient({
 	baseUrl: 'https://release-o-matic.example.com',
 	token: process.env.RMATIC_TOKEN,
 })
 
-const health = await client.health()
-const releases = await client.releases.list({ game: 'papa-cherry-2', platform: 'vk' })
-const pre = await client.deploy.pre({ game: 'papa-cherry-2', env: 'staging', version: 42 })
+const health = await rmatic.health()
+const releases = await rmatic.releases.list({ game: 'papa-cherry-2', platform: 'vk' })
+const pre = await rmatic.preDeploy({ game: 'papa-cherry-2', env: 'staging', version: 42 })
 ```
 
 ## Configuration
