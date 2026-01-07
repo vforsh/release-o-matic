@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { cac } from 'cac'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import prompts from 'prompts'
 import {
 	createClient,
@@ -11,7 +13,7 @@ import {
 	type DeploymentDetail,
 	type ReleaseInfo,
 } from '@vforsh/rmatic-client'
-import { resolveConfig, type CliFlags } from './config.js'
+import { getConfigPath, resolveConfig, type CliFlags } from './config.js'
 import { resolveOutputMode, writeError, writeJson, writeLines, writeText } from './output.js'
 
 const cli = cac('rmatic')
@@ -54,6 +56,84 @@ cli
 			}
 			writeLines(lines)
 		})
+	})
+
+cli
+	.command('init', 'Create a config file for rmatic')
+	.option('--interactive', 'Prompt for config values')
+	.example('rmatic init --interactive')
+	.action(async (flags) => {
+		const cliFlags = (flags ?? {}) as CliFlags
+		try {
+			const configPath = getConfigPath()
+			const shouldPrompt = Boolean(cliFlags.interactive)
+			const isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
+
+			const existing = await fileExists(configPath)
+			if (existing && !cliFlags.force) {
+				if (cliFlags.noInput || !isInteractive) {
+					throw new RmaticConfigError(
+						`Config already exists at ${configPath}. Use --force to overwrite.`,
+					)
+				}
+
+				const confirm = await prompts({
+					type: 'confirm',
+					name: 'overwrite',
+					message: `Overwrite existing config at ${configPath}?`,
+					initial: false,
+				})
+
+				if (!confirm.overwrite) {
+					writeError('Init cancelled.')
+					process.exitCode = 1
+					return
+				}
+			}
+
+			let baseUrl = cliFlags.baseUrl ?? process.env.RMATIC_BASE_URL
+			let token = cliFlags.token ?? process.env.RMATIC_TOKEN
+
+			if (shouldPrompt) {
+				if (!isInteractive) {
+					throw new RmaticConfigError('Interactive mode requires a TTY.')
+				}
+				const responses = await prompts([
+					{
+						type: 'text',
+						name: 'baseUrl',
+						message: 'Base URL',
+						initial: baseUrl ?? '',
+					},
+					{
+						type: 'password',
+						name: 'token',
+						message: 'Bearer token (optional)',
+						initial: token ?? '',
+					},
+				])
+				baseUrl = responses.baseUrl || baseUrl
+				token = responses.token || token
+			}
+
+			if (!baseUrl) {
+				throw new RmaticConfigError(
+					'Base URL is required. Pass --base-url or use --interactive.',
+				)
+			}
+
+			const payload: { baseUrl: string; token?: string } = { baseUrl }
+			if (token) {
+				payload.token = token
+			}
+
+			await fs.mkdir(path.dirname(configPath), { recursive: true })
+			await fs.writeFile(configPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+
+			writeLines([`Config written to ${configPath}.`])
+		} catch (error) {
+			handleError(error, cliFlags)
+		}
 	})
 
 cli
@@ -358,6 +438,15 @@ async function withClient(
 		await handler(client, outputMode, flags)
 	} catch (error) {
 		handleError(error, flags)
+	}
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+	try {
+		await fs.access(filePath)
+		return true
+	} catch {
+		return false
 	}
 }
 

@@ -15,6 +15,7 @@ export type CliFlags = {
 	noColor?: boolean
 	noInput?: boolean
 	force?: boolean
+	interactive?: boolean
 }
 
 export type ResolvedConfig = {
