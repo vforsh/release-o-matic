@@ -1,9 +1,15 @@
+import path from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 /**
  * https://vitest.dev/config/
  */
 export default defineConfig({
+	resolve: {
+		alias: {
+			'@vforsh/rmatic-client': path.resolve(__dirname, 'packages/client/src/index.ts'),
+		},
+	},
 	test: {
 		// Include pattern for test files
 		include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],

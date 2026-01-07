@@ -106,6 +106,44 @@ The deployment workflow consists of three main phases:
 - Authentication requires a Bearer token when enabled
 
 
+## CLI and Client Library
+
+This repo ships a CLI and a Node-only TypeScript client library.
+
+### Install
+
+```
+npm install -g @vforsh/rmatic
+```
+
+```
+npm install @vforsh/rmatic-client
+```
+
+### Configuration
+
+CLI config precedence: flags > env vars > config file.
+
+- `RMATIC_BASE_URL`
+- `RMATIC_TOKEN`
+
+Config file path:
+
+```
+$XDG_CONFIG_HOME/rmatic/config.json
+# or ~/.config/rmatic/config.json
+```
+
+### CLI Examples
+
+```
+rmatic --base-url https://… --token $RMATIC_TOKEN health
+rmatic publish papa-cherry-2 vk master-21
+rmatic releases list papa-cherry-2 vk --plain
+rmatic rollback papa-cherry-2 vk --force
+```
+
+
 ## Service Deployment
 
 This repo is deployed to a Dokku remote. Deploys are git pushes that trigger a Docker build on the server.

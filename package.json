@@ -1,9 +1,13 @@
 {
 	"name": "release-o-matic",
+	"private": true,
+	"workspaces": ["packages/*"],
 	"scripts": {
 		"start": "bun run src/index.ts",
 		"start:dev": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
+		"publish:client": "npm publish --access public --workspace packages/client",
+		"publish:cli": "npm publish --access public --workspace packages/cli",
 		"deploy": "bun dokku-deploy.ts release-o-matic",
 		"deploy-env": "bun dokku-env-set.ts release-o-matic",
 		"deploy-env:no-restart": "bun dokku-env-set.ts --no-restart release-o-matic",
@@ -25,6 +29,7 @@
 		"@tsconfig/bun": "^1.0.7",
 		"@types/bun": "latest",
 		"@types/prompts": "^2.4.9",
+		"@types/node": "^20.11.19",
 		"memfs": "^4.17.0",
 		"prettier": "^3.3.3",
 		"prettier-plugin-organize-imports": "^4.1.0",
