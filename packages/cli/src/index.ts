@@ -14,7 +14,7 @@ import {
 	type DeploymentDetail,
 	type ReleaseInfo,
 } from '@vforsh/rmatic-client'
-import { getConfigPath, resolveConfig, type CliFlags } from './config.js'
+import { getConfigPath, readConfigFile, resolveConfig, type CliFlags } from './config.js'
 import { resolveOutputMode, writeError, writeJson, writeLines, writeText } from './output.js'
 
 const require = createRequire(import.meta.url)
@@ -65,13 +65,41 @@ cli
 	})
 
 cli
-	.command('init', 'Create a config file for rmatic')
+	.command('config [action]', 'Show or initialize CLI configuration')
 	.option('--interactive', 'Prompt for config values')
-	.example('rmatic init --interactive')
-	.action(async (flags) => {
+	.example('rmatic config')
+	.example('rmatic config init --interactive')
+	.action(async (action, flags) => {
 		const cliFlags = (flags ?? {}) as CliFlags
+		const command = action?.toString()
 		try {
+			if (command && command !== 'init') {
+				throw new RmaticConfigError(`Unknown config action: ${command}`)
+			}
+
 			const configPath = getConfigPath()
+
+			if (command !== 'init') {
+				const config = await readConfigFile(configPath)
+
+				if (!config) {
+					throw new RmaticConfigError(`Config file not found at ${configPath}.`)
+				}
+
+				const outputMode = resolveOutputMode(cliFlags)
+				if (outputMode === 'json') {
+					writeJson(config)
+					return
+				}
+
+				const lines = [
+					`baseUrl=${config.baseUrl ?? ''}`,
+					`token=${config.token ?? ''}`,
+				]
+				writeLines(lines)
+				return
+			}
+
 			const shouldPrompt = Boolean(cliFlags.interactive)
 			const isInteractive = Boolean(process.stdin.isTTY && process.stdout.isTTY)
 
