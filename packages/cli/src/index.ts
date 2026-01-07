@@ -406,26 +406,27 @@ cli.on('command:*', () => {
 cli.parse()
 
 async function withClient(
-	flags: CliFlags,
+	flags: CliFlags | undefined,
 	handler: (
 		client: ReturnType<typeof createClient>,
 		outputMode: ReturnType<typeof resolveOutputMode>,
 		flags: CliFlags,
 	) => Promise<void>,
 ) {
+	const safeFlags = (flags ?? {}) as CliFlags
 	let outputMode: ReturnType<typeof resolveOutputMode>
 	try {
-		outputMode = resolveOutputMode(flags)
+		outputMode = resolveOutputMode(safeFlags)
 	} catch (error) {
-		handleError(new RmaticConfigError((error as Error).message, { cause: error }), flags)
+		handleError(new RmaticConfigError((error as Error).message, { cause: error }), safeFlags)
 		return
 	}
 
 	let config: Awaited<ReturnType<typeof resolveConfig>>
 	try {
-		config = await resolveConfig(flags)
+		config = await resolveConfig(safeFlags)
 	} catch (error) {
-		handleError(error, flags)
+		handleError(error, safeFlags)
 		return
 	}
 
@@ -442,9 +443,9 @@ async function withClient(
 	})
 
 	try {
-		await handler(client, outputMode, flags)
+		await handler(client, outputMode, safeFlags)
 	} catch (error) {
-		handleError(error, flags)
+		handleError(error, safeFlags)
 	}
 }
 
@@ -457,10 +458,11 @@ async function fileExists(filePath: string): Promise<boolean> {
 	}
 }
 
-function handleError(error: unknown, flags: CliFlags) {
+function handleError(error: unknown, flags?: CliFlags) {
+	const debug = Boolean(flags?.debug)
 	if (error instanceof RmaticConfigError) {
 		writeError(error.message)
-		if (flags.debug && error.cause) {
+		if (debug && error.cause) {
 			writeError(String(error.cause))
 		}
 		process.exitCode = 2
@@ -469,7 +471,7 @@ function handleError(error: unknown, flags: CliFlags) {
 
 	if (error instanceof RmaticHttpError) {
 		writeError(error.message)
-		if (flags.debug && error.cause) {
+		if (debug && error.cause) {
 			writeError(String(error.cause))
 		}
 
@@ -493,7 +495,7 @@ function handleError(error: unknown, flags: CliFlags) {
 
 	if (error instanceof RmaticNetworkError) {
 		writeError(error.message)
-		if (flags.debug && error.cause) {
+		if (debug && error.cause) {
 			writeError(String(error.cause))
 		}
 		process.exitCode = 6
@@ -502,7 +504,7 @@ function handleError(error: unknown, flags: CliFlags) {
 
 	if (error instanceof RmaticError) {
 		writeError(error.message)
-		if (flags.debug && error.cause) {
+		if (debug && error.cause) {
 			writeError(String(error.cause))
 		}
 		process.exitCode = 1
@@ -510,7 +512,7 @@ function handleError(error: unknown, flags: CliFlags) {
 	}
 
 	writeError('Unexpected error occurred.')
-	if (flags.debug) {
+	if (debug) {
 		writeError(String(error))
 	}
 	process.exitCode = 1
