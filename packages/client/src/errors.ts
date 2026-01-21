@@ -1,3 +1,6 @@
+/**
+ * Base error type for the rmatic client.
+ */
 export class RmaticError extends Error {
 	cause?: unknown
 
@@ -10,6 +13,9 @@ export class RmaticError extends Error {
 	}
 }
 
+/**
+ * Configuration or validation error (missing base URL, invalid timeout, etc.).
+ */
 export class RmaticConfigError extends RmaticError {
 	constructor(message: string, options?: { cause?: unknown }) {
 		super(message, options)
@@ -17,6 +23,9 @@ export class RmaticConfigError extends RmaticError {
 	}
 }
 
+/**
+ * HTTP error for non-2xx responses.
+ */
 export class RmaticHttpError extends RmaticError {
 	status: number
 	method: string
@@ -33,6 +42,9 @@ export class RmaticHttpError extends RmaticError {
 	}
 }
 
+/**
+ * Network or timeout error for failed requests.
+ */
 export class RmaticNetworkError extends RmaticError {
 	kind: 'network' | 'timeout'
 

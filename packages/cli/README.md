@@ -35,7 +35,8 @@ Example:
 
 ```
 rmatic --base-url https://… --token $RMATIC_TOKEN health
-rmatic init --interactive
+rmatic config init --interactive
+rmatic config
 rmatic publish papa-cherry-2 vk master-21
 rmatic releases list papa-cherry-2 vk --plain
 rmatic rollback papa-cherry-2 vk --force

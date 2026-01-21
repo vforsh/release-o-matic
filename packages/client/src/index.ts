@@ -1,4 +1,5 @@
 export { createClient } from './client.js'
+export type { RmaticClient } from './client.js'
 export {
 	RmaticConfigError,
 	RmaticError,
