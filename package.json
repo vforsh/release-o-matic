@@ -9,9 +9,9 @@
 		"rebuild:packages": "npm run build --workspaces --if-present",
 		"publish:client": "npm publish --access public --workspace packages/client",
 		"publish:cli": "npm publish --access public --workspace packages/cli",
-		"deploy": "bun dokku-deploy.ts release-o-matic",
-		"deploy-env": "bun dokku-env-set.ts release-o-matic",
-		"deploy-env:no-restart": "bun dokku-env-set.ts --no-restart release-o-matic",
+		"deploy": "bun ./scripts/dokku-deploy.ts release-o-matic",
+		"deploy-env": "bun ./scripts/dokku-env-set.ts release-o-matic",
+		"deploy-env:no-restart": "bun ./scripts/dokku-env-set.ts --no-restart release-o-matic",
 		"test": "vitest run",
 		"test:watch": "vitest"
 	},
