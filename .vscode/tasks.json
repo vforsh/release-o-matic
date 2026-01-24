@@ -3,6 +3,7 @@
 	"tasks": [
 		{
 			"label": "serve:dev",
+			"detail": "Runs the Hono dev server with bun --hot",
 			"type": "npm",
 			"script": "start:dev",
 			"group": "build",
@@ -10,11 +11,11 @@
 				"reveal": "always",
 				"panel": "new"
 			},
-			"problemMatcher": [],
-			"detail": "Runs the Hono dev server with bun --hot"
+			"problemMatcher": []
 		},
 		{
 			"label": "deploy",
+			"detail": "Pushes the master branch to dokku remote",
 			"type": "npm",
 			"script": "deploy",
 			"group": "build",
@@ -22,11 +23,11 @@
 				"reveal": "always",
 				"panel": "new"
 			},
-			"problemMatcher": [],
-			"detail": "Pushes the master branch to dokku remote"
+			"problemMatcher": []
 		},
 		{
 			"label": "deploy:env",
+			"detail": "Sets Dokku environment variables for release-o-matic",
 			"type": "npm",
 			"script": "deploy-env",
 			"group": "build",
@@ -34,11 +35,11 @@
 				"reveal": "always",
 				"panel": "new"
 			},
-			"problemMatcher": [],
-			"detail": "Sets Dokku environment variables for release-o-matic"
+			"problemMatcher": []
 		},
 		{
 			"label": "typecheck:watch",
+			"detail": "Runs tsc --watch to find type errors during development",
 			"type": "npm",
 			"script": "typecheck-dev",
 			"group": "build",
@@ -47,11 +48,35 @@
 				"panel": "new"
 			},
 			"problemMatcher": ["$tsc-watch"],
-			"isBackground": true,
-			"detail": "Runs tsc --watch to find type errors during development"
+			"isBackground": true
+		},
+		{
+			"label": "typecheck",
+			"detail": "Runs tsc once to find type errors",
+			"type": "shell",
+			"command": "bunx tsc --noEmit",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "new"
+			},
+			"problemMatcher": ["$tsc"]
+		},
+		{
+			"label": "rebuild:packages",
+			"detail": "Runs build for all workspace packages",
+			"type": "npm",
+			"script": "rebuild:packages",
+			"group": "build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "new"
+			},
+			"problemMatcher": []
 		},
 		{
 			"label": "test",
+			"detail": "Runs all vitest tests once",
 			"type": "npm",
 			"script": "test",
 			"group": "test",
@@ -59,11 +84,11 @@
 				"reveal": "always",
 				"panel": "new"
 			},
-			"problemMatcher": [],
-			"detail": "Runs all vitest tests once"
+			"problemMatcher": []
 		},
 		{
 			"label": "test:watch",
+			"detail": "Runs vitest in watch mode",
 			"type": "npm",
 			"script": "test:watch",
 			"group": "test",
@@ -71,18 +96,17 @@
 				"reveal": "always",
 				"panel": "new"
 			},
-			"problemMatcher": [],
-			"detail": "Runs vitest in watch mode"
+			"problemMatcher": []
 		},
 		{
 			"label": "Start Dev",
+			"detail": "Starts both dev server and TS compiler in watch mode",
 			"dependsOn": ["Start Dev Server", "TypeScript Watch"],
 			"group": {
 				"kind": "build",
 				"isDefault": true
 			},
-			"problemMatcher": ["$tsc-watch"],
-			"detail": "Starts both dev server and TS compiler in watch mode"
+			"problemMatcher": ["$tsc-watch"]
 		}
 	]
 }
