@@ -41,6 +41,100 @@ const buildInfoSchema = z.object({
 
 type BuildInfo = z.infer<typeof buildInfoSchema>
 
+const buildInfoShape = {
+	version: 'number',
+	builtAt: 'number',
+	builtAtReadable: 'string',
+	gitCommitHash: 'string',
+	gitBranch: 'string',
+} as const
+
+type BuildInfoReadResult =
+	| { ok: true; data: BuildInfo }
+	| { ok: false; response: Response }
+
+function readBuildInfo(c: any, buildDir: string, buildLabel: string): BuildInfoReadResult {
+	const buildInfoPath = path.join(buildDir, 'build_info.json')
+	if (!fse.existsSync(buildInfoPath)) {
+		return {
+			ok: false,
+			response: c.json(
+				{
+					message: `build '${buildLabel}' is missing build_info.json`,
+					path: buildInfoPath,
+					expectedShape: buildInfoShape,
+				},
+				404,
+			),
+		}
+	}
+
+	let rawBuildInfo: unknown
+	try {
+		rawBuildInfo = fse.readJsonSync(buildInfoPath)
+	} catch (error) {
+		return {
+			ok: false,
+			response: c.json(
+				{
+					message: `build '${buildLabel}' has unreadable build_info.json`,
+					path: buildInfoPath,
+					error: getErrorLog(error),
+				},
+				400,
+			),
+		}
+	}
+
+	const buildInfoResult = buildInfoSchema.safeParse(rawBuildInfo)
+	if (!buildInfoResult.success) {
+		return {
+			ok: false,
+			response: c.json(
+				{
+					message: `build '${buildLabel}' has invalid build_info.json shape`,
+					path: buildInfoPath,
+					expectedShape: buildInfoShape,
+					issues: buildInfoResult.error.issues,
+				},
+				400,
+			),
+		}
+	}
+
+	return { ok: true, data: buildInfoResult.data }
+}
+
+function getCurrentDeployedVersion(envDir: string): number | null {
+	if (!fse.existsSync(envDir)) {
+		return null
+	}
+
+	const latestSymlinkPath = path.join(envDir, 'latest')
+	if (fse.existsSync(latestSymlinkPath)) {
+		try {
+			const currentBuildPath = fse.realpathSync(latestSymlinkPath)
+			const version = parseInt(path.basename(currentBuildPath))
+			if (Number.isInteger(version)) {
+				return version
+			}
+		} catch (error) {
+			console.warn(`Failed to read latest symlink at ${latestSymlinkPath}:`, error)
+		}
+	}
+
+	const versions = fse
+		.readdirSync(envDir)
+		.map((item) => parseInt(item))
+		.filter((version) => Number.isInteger(version))
+
+	if (versions.length === 0) {
+		return null
+	}
+
+	return Math.max(...versions)
+}
+
 type DeployInfo = BuildInfo & {
 	deployedAt: string
 }
@@ -147,6 +241,19 @@ app.get('/preDeploy/:game/:env/:version', (c) => {
 		.filter((item) => Number.isInteger(item))
 		.sort((a, b) => a - b)
 
+	const currentDeployedVersion = getCurrentDeployedVersion(envDir)
+	if (currentDeployedVersion !== null && build <= currentDeployedVersion) {
+		const expectedVersion = currentDeployedVersion + 1
+		return c.json(
+			{
+				message: `version must be greater than current. expected: ${expectedVersion}`,
+				latestVersion: currentDeployedVersion,
+				expectedVersion,
+			},
+			400,
+		)
+	}
+
 	if (existingBuilds.includes(build)) {
 		return c.json(
 			{
@@ -190,15 +297,28 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 		return c.json({ message: `build #${deployedBuildVersion} doesn't exist` }, 404)
 	}
 
+	const deployedBuildVersionNumber = parseInt(deployedBuildVersion)
+	const currentDeployedVersion = getCurrentDeployedVersion(envDir)
+	if (
+		Number.isInteger(deployedBuildVersionNumber) &&
+		currentDeployedVersion !== null &&
+		deployedBuildVersionNumber <= currentDeployedVersion
+	) {
+		const expectedVersion = currentDeployedVersion + 1
+		return c.json(
+			{
+				message: `version must be greater than current. expected: ${expectedVersion}`,
+				latestVersion: currentDeployedVersion,
+				expectedVersion,
+			},
+			400,
+		)
+	}
+
 	const deployedBuildDir = path.join(envDir, deployedBuildVersion.toString())
 
 	if (!fse.existsSync(deployedBuildDir)) {	
 		return c.json({ message: `build directory '${deployedBuildDir}' doesn't exist` }, 404)
-	}
-
-	// ensure that the build_info.json is present
-	if (!fse.existsSync(path.join(deployedBuildDir, 'build_info.json'))) {
-		return c.json({ message: `build '${deployedBuildVersion}' doesn't have build_info.json` }, 404)
 	}
 
 	// ensure that the index.html is present
@@ -206,15 +326,9 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 		return c.json({ message: `build '${deployedBuildVersion}' doesn't have index.html` }, 404)
 	}
 
-	const buildInfoPath = path.join(deployedBuildDir, 'build_info.json')
-	const buildInfo = fse.existsSync(buildInfoPath) ? (fse.readJsonSync(buildInfoPath) as BuildInfo) : null
-	if (!buildInfo) {
-		return c.json({ message: `build info file '${deployedBuildDir}/build_info.json' is missing` }, 404)
-	}
-
-	const buildInfoResult = buildInfoSchema.safeParse(buildInfo)
-	if (!buildInfoResult.success) {
-		return c.json({ message: `build info file is invalid`, errors: buildInfoResult.error.errors }, 400)
+	const buildInfoResult = readBuildInfo(c, deployedBuildDir, deployedBuildVersion)
+	if (!buildInfoResult.ok) {
+		return buildInfoResult.response
 	}
 
 	let symlinkPath = path.join(envDir, 'latest')
@@ -264,32 +378,34 @@ app.get('/deployments/:game/:env', (c) => {
 		return c.json({ message: `environment '${env}' doesn't exist` }, 404)
 	}
 
-	const existingBuilds = fse
+	const buildVersions = fse
 		.readdirSync(envDir)
 		.filter(
 			(buildVersionStr) =>
-				Number.isInteger(parseInt(buildVersionStr)) &&
-				fse.statSync(path.join(envDir, buildVersionStr)).isDirectory() &&
-				fse.existsSync(path.join(envDir, buildVersionStr, 'build_info.json')),
+				Number.isInteger(parseInt(buildVersionStr)) && fse.statSync(path.join(envDir, buildVersionStr)).isDirectory(),
 		)
 		.sort((a, b) => parseInt(b) - parseInt(a))
-		.reduce((acc, version) => {
-			const dirpath = path.join(envDir, version)
-			const modifiedAt = fse.statSync(dirpath).mtime
-			const buildInfo = fse.readJsonSync(path.join(dirpath, 'build_info.json')) as BuildInfo
 
-			acc.push({
-				version: parseInt(version),
-				gitBranch: buildInfo.gitBranch,
-				gitCommitHash: buildInfo.gitCommitHash,
-				builtAt: buildInfo.builtAt,
-				deployedAt: toReadableDateString(modifiedAt.getTime()),
-			} as DeployInfo)
+	const deployments: DeployInfo[] = []
+	for (const version of buildVersions) {
+		const dirpath = path.join(envDir, version)
+		const modifiedAt = fse.statSync(dirpath).mtime
+		const buildInfoResult = readBuildInfo(c, dirpath, version)
+		if (!buildInfoResult.ok) {
+			return buildInfoResult.response
+		}
 
-			return acc
-		}, [] as DeployInfo[])
+		deployments.push({
+			version: parseInt(version),
+			gitBranch: buildInfoResult.data.gitBranch,
+			gitCommitHash: buildInfoResult.data.gitCommitHash,
+			builtAt: buildInfoResult.data.builtAt,
+			builtAtReadable: buildInfoResult.data.builtAtReadable,
+			deployedAt: toReadableDateString(modifiedAt.getTime()),
+		})
+	}
 
-	return c.json(existingBuilds)
+	return c.json(deployments)
 })
 
 // инфо о текущем (последнем) задеплоенном билде
@@ -319,14 +435,17 @@ app.get('/deployments/:game/:env/current', (c) => {
 
 	try {
 		const modifiedAt = fse.statSync(currentBuildPath).mtime
-		const buildInfo = fse.readJsonSync(path.join(currentBuildPath, 'build_info.json')) as BuildInfo
+		const buildInfoResult = readBuildInfo(c, currentBuildPath, version)
+		if (!buildInfoResult.ok) {
+			return buildInfoResult.response
+		}
 
 		const deployInfo: DeployInfo = {
 			version: parseInt(version),
-			gitBranch: buildInfo.gitBranch,
-			gitCommitHash: buildInfo.gitCommitHash,
-			builtAt: buildInfo.builtAt,
-			builtAtReadable: buildInfo.builtAtReadable,
+			gitBranch: buildInfoResult.data.gitBranch,
+			gitCommitHash: buildInfoResult.data.gitCommitHash,
+			builtAt: buildInfoResult.data.builtAt,
+			builtAtReadable: buildInfoResult.data.builtAtReadable,
 			deployedAt: toReadableDateString(modifiedAt.getTime()),
 		}
 
@@ -361,7 +480,10 @@ app.get('/deployments/:game/:env/:version', (c) => {
 
 	try {
 		const modifiedAt = fse.statSync(buildDir).mtime
-		const buildInfo = fse.readJsonSync(path.join(buildDir, 'build_info.json')) as BuildInfo
+		const buildInfoResult = readBuildInfo(c, buildDir, version)
+		if (!buildInfoResult.ok) {
+			return buildInfoResult.response
+		}
 
 		// Check if this is the current deployment
 		const latestSymlinkPath = path.join(envDir, 'latest')
@@ -374,10 +496,10 @@ app.get('/deployments/:game/:env/:version', (c) => {
 
 		const deployInfo: DeployInfo & { isCurrent: boolean } = {
 			version: parseInt(version),
-			gitBranch: buildInfo.gitBranch,
-			gitCommitHash: buildInfo.gitCommitHash,
-			builtAt: buildInfo.builtAt,
-			builtAtReadable: buildInfo.builtAtReadable,
+			gitBranch: buildInfoResult.data.gitBranch,
+			gitCommitHash: buildInfoResult.data.gitCommitHash,
+			builtAt: buildInfoResult.data.builtAt,
+			builtAtReadable: buildInfoResult.data.builtAtReadable,
 			deployedAt: toReadableDateString(modifiedAt.getTime()),
 			isCurrent,
 		}
@@ -528,14 +650,14 @@ app.get('/publish/:game/:platform/:buildKey?', async (c) => {
 		return c.json({ message: `build '${buildKey}' doesn't exist` }, 404)
 	}
 
-	// ensure that the build_info.json is present
-	if (!fse.existsSync(path.join(srcDir, 'build_info.json'))) {
-		return c.json({ message: `build '${buildKey}' doesn't have build_info.json` }, 404)
-	}
-
 	// ensure that the index.html is present
 	if (!fse.existsSync(path.join(srcDir, 'index.html'))) {
 		return c.json({ message: `build '${buildKey}' doesn't have index.html` }, 404)
+	}
+
+	const buildInfoResult = readBuildInfo(c, srcDir, buildKey)
+	if (!buildInfoResult.ok) {
+		return buildInfoResult.response
 	}
 
 	let destDir = path.join(gameDir, `prod/${platform}`)
@@ -546,7 +668,7 @@ app.get('/publish/:game/:platform/:buildKey?', async (c) => {
 	fse.ensureDirSync(destDirTemp)
 	fse.copySync(srcDir, destDirTemp, {})
 
-	let buildInfo = fse.readJsonSync(path.join(destDirTemp, 'build_info.json')) as BuildInfo
+	let buildInfo = buildInfoResult.data
 
 	// build_info.json нам уже не нужен, удаляем его
 	fse.rmSync(path.join(destDirTemp, 'build_info.json'))

@@ -6,6 +6,7 @@
 		"start": "bun run src/index.ts",
 		"start:dev": "bun run --hot src/index.ts",
 		"typecheck-dev": "bunx tsc --watch --noEmit",
+		"rebuild:packages": "npm run build --workspaces --if-present",
 		"publish:client": "npm publish --access public --workspace packages/client",
 		"publish:cli": "npm publish --access public --workspace packages/cli",
 		"deploy": "bun dokku-deploy.ts release-o-matic",

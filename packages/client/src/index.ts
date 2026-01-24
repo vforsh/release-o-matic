@@ -8,6 +8,7 @@ export {
 } from './errors.js'
 export type {
 	DeployInfo,
+	DeployVersionError,
 	DeploymentDetail,
 	HealthResponse,
 	PostDeployResponse,

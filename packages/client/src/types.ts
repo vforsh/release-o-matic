@@ -31,6 +31,15 @@ export type DeploymentDetail = DeployInfo & {
 }
 
 /**
+ * Version guard error when attempting to deploy an older build.
+ */
+export type DeployVersionError = {
+	message: string
+	latestVersion: number
+	expectedVersion: number
+}
+
+/**
  * Releases listing response.
  */
 export type ReleasesResponse = {
