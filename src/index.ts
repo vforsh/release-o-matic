@@ -53,6 +53,34 @@ type BuildInfoReadResult =
 	| { ok: true; data: BuildInfo }
 	| { ok: false; response: Response }
 
+const DEPLOY_STATUS_FILENAME = '.deploy_status.json'
+
+type DeployStatus =
+	| { status: 'deploy-started'; startedAt: number }
+	| { status: 'post-deploy-failed'; failedAt: number; reason: string; details?: Record<string, unknown> }
+
+function writeDeployStatus(buildDir: string, data: DeployStatus): void {
+	fse.outputJsonSync(path.join(buildDir, DEPLOY_STATUS_FILENAME), data, { spaces: '\t' })
+}
+
+function readDeployStatus(buildDir: string): DeployStatus | null {
+	const statusPath = path.join(buildDir, DEPLOY_STATUS_FILENAME)
+	if (!fse.existsSync(statusPath)) {
+		return null
+	}
+
+	try {
+		const raw = fse.readJsonSync(statusPath) as DeployStatus
+		if (!raw || typeof raw !== 'object') {
+			return null
+		}
+
+		return raw
+	} catch {
+		return null
+	}
+}
+
 function readBuildInfo(c: any, buildDir: string, buildLabel: string): BuildInfoReadResult {
 	const buildInfoPath = path.join(buildDir, 'build_info.json')
 	if (!fse.existsSync(buildInfoPath)) {
@@ -127,6 +155,11 @@ function getCurrentDeployedVersion(envDir: string): number | null {
 		.readdirSync(envDir)
 		.map((item) => parseInt(item))
 		.filter((version) => Number.isInteger(version))
+		.filter((version) => {
+			// Only count directories with index.html as completed deploys
+			const buildDir = path.join(envDir, version.toString())
+			return fse.existsSync(path.join(buildDir, 'index.html'))
+		})
 
 	if (versions.length === 0) {
 		return null
@@ -137,6 +170,8 @@ function getCurrentDeployedVersion(envDir: string): number | null {
 
 type DeployInfo = BuildInfo & {
 	deployedAt: string
+	isDeploying: boolean
+	isDeployFailed: boolean
 }
 
 export type ReleaseInfo = {
@@ -274,6 +309,11 @@ app.get('/preDeploy/:game/:env/:version', (c) => {
 		fse.ensureDirSync(buildDir)
 	}
 
+	writeDeployStatus(buildDir, {
+		status: 'deploy-started',
+		startedAt: Date.now(),
+	})
+
 	return c.json({
 		newBuildVersion: build,
 		newBuildDir: buildDir.replace(ENV.GAME_BUILDS_DIR, ENV.GAME_BUILDS_DIR_HOST),
@@ -298,21 +338,8 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 	}
 
 	const deployedBuildVersionNumber = parseInt(deployedBuildVersion)
-	const currentDeployedVersion = getCurrentDeployedVersion(envDir)
-	if (
-		Number.isInteger(deployedBuildVersionNumber) &&
-		currentDeployedVersion !== null &&
-		deployedBuildVersionNumber <= currentDeployedVersion
-	) {
-		const expectedVersion = currentDeployedVersion + 1
-		return c.json(
-			{
-				message: `version must be greater than current. expected: ${expectedVersion}`,
-				latestVersion: currentDeployedVersion,
-				expectedVersion,
-			},
-			400,
-		)
+	if (!Number.isInteger(deployedBuildVersionNumber) || deployedBuildVersionNumber <= 0) {
+		return c.json({ message: 'invalid version, must be a positive integer' }, 400)
 	}
 
 	const deployedBuildDir = path.join(envDir, deployedBuildVersion.toString())
@@ -323,12 +350,48 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	// ensure that the index.html is present
 	if (!fse.existsSync(path.join(deployedBuildDir, 'index.html'))) {
+		writeDeployStatus(deployedBuildDir, {
+			status: 'post-deploy-failed',
+			failedAt: Date.now(),
+			reason: 'missing index.html',
+			details: {
+				buildVersion: deployedBuildVersionNumber,
+			},
+		})
 		return c.json({ message: `build '${deployedBuildVersion}' doesn't have index.html` }, 404)
 	}
 
 	const buildInfoResult = readBuildInfo(c, deployedBuildDir, deployedBuildVersion)
 	if (!buildInfoResult.ok) {
+		writeDeployStatus(deployedBuildDir, {
+			status: 'post-deploy-failed',
+			failedAt: Date.now(),
+			reason: 'invalid build_info.json',
+			details: {
+				buildVersion: deployedBuildVersionNumber,
+			},
+		})
 		return buildInfoResult.response
+	}
+
+	if (buildInfoResult.data.version !== deployedBuildVersionNumber) {
+		writeDeployStatus(deployedBuildDir, {
+			status: 'post-deploy-failed',
+			failedAt: Date.now(),
+			reason: 'build_info.json version mismatch',
+			details: {
+				requestedVersion: deployedBuildVersionNumber,
+				buildInfoVersion: buildInfoResult.data.version,
+			},
+		})
+		return c.json(
+			{
+				message: 'build_info.json version does not match requested version',
+				requestedVersion: deployedBuildVersionNumber,
+				buildInfoVersion: buildInfoResult.data.version,
+			},
+			400,
+		)
 	}
 
 	let symlinkPath = path.join(envDir, 'latest')
@@ -356,6 +419,8 @@ app.get('/postDeploy/:game/:env/:version', (c) => {
 
 	const removedPaths = removeOldDeployments(envDir, { buildsNumToKeep: 10 })
 	console.log(`[${time}] Removed ${removedPaths.length} deployments: ${removedPaths.join(', ')}`)
+
+	fse.rmSync(path.join(deployedBuildDir, DEPLOY_STATUS_FILENAME), { force: true })
 
 	return c.json({
 		buildVersion: deployedBuildVersion,
@@ -395,6 +460,10 @@ app.get('/deployments/:game/:env', (c) => {
 			return buildInfoResult.response
 		}
 
+		const deployStatus = readDeployStatus(dirpath)
+		const isDeploying = deployStatus?.status === 'deploy-started'
+		const isDeployFailed = deployStatus?.status === 'post-deploy-failed'
+
 		deployments.push({
 			version: parseInt(version),
 			gitBranch: buildInfoResult.data.gitBranch,
@@ -402,6 +471,8 @@ app.get('/deployments/:game/:env', (c) => {
 			builtAt: buildInfoResult.data.builtAt,
 			builtAtReadable: buildInfoResult.data.builtAtReadable,
 			deployedAt: toReadableDateString(modifiedAt.getTime()),
+			isDeploying,
+			isDeployFailed,
 		})
 	}
 
@@ -440,6 +511,10 @@ app.get('/deployments/:game/:env/current', (c) => {
 			return buildInfoResult.response
 		}
 
+		const deployStatus = readDeployStatus(currentBuildPath)
+		const isDeploying = deployStatus?.status === 'deploy-started'
+		const isDeployFailed = deployStatus?.status === 'post-deploy-failed'
+
 		const deployInfo: DeployInfo = {
 			version: parseInt(version),
 			gitBranch: buildInfoResult.data.gitBranch,
@@ -447,6 +522,8 @@ app.get('/deployments/:game/:env/current', (c) => {
 			builtAt: buildInfoResult.data.builtAt,
 			builtAtReadable: buildInfoResult.data.builtAtReadable,
 			deployedAt: toReadableDateString(modifiedAt.getTime()),
+			isDeploying,
+			isDeployFailed,
 		}
 
 		return c.json(deployInfo)
@@ -485,6 +562,10 @@ app.get('/deployments/:game/:env/:version', (c) => {
 			return buildInfoResult.response
 		}
 
+		const deployStatus = readDeployStatus(buildDir)
+		const isDeploying = deployStatus?.status === 'deploy-started'
+		const isDeployFailed = deployStatus?.status === 'post-deploy-failed'
+
 		// Check if this is the current deployment
 		const latestSymlinkPath = path.join(envDir, 'latest')
 		let isCurrent = false
@@ -501,6 +582,8 @@ app.get('/deployments/:game/:env/:version', (c) => {
 			builtAt: buildInfoResult.data.builtAt,
 			builtAtReadable: buildInfoResult.data.builtAtReadable,
 			deployedAt: toReadableDateString(modifiedAt.getTime()),
+			isDeploying,
+			isDeployFailed,
 			isCurrent,
 		}
 
